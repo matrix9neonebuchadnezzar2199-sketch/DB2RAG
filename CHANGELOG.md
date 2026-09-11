@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - RAG 一覧からの削除（secure purge: ジョブ停止、Qdrant collection/alias、SQLite 関連行、uploads/exports）
 - 変換ジョブ表の実行作業列（新規/追加タグ + 名称 + job_id）と開始/終了/経過の 3 段表示
+- README「このツールで管理するRAGデータについて」（SQLite / Qdrant / 追記 / 削除）
 
 ### Changed
 

@@ -16,13 +16,14 @@
 | 役割 | 最初に読む |
 |------|------------|
 | 使う人 | [インストール](#インストール) → [使用例](#使用例) → [画面](#画面) → [終了](#終了) |
-| 運用する人 | [動作環境](#動作環境) → [設定](#設定) → [トラブルシューティング](#トラブルシューティング) |
-| 開発する人 | [概要](#概要) → [アーキテクチャ](#アーキテクチャ) → [検証](#検証) → [設計書](#設計書) |
+| 運用する人 | [このツールで管理するRAGデータについて](#このツールで管理するragデータについて) → [設定](#設定) → [トラブルシューティング](#トラブルシューティング) |
+| 開発する人 | [概要](#概要) → [アーキテクチャ](#アーキテクチャ) → [このツールで管理するRAGデータについて](#このツールで管理するragデータについて) → [設計書](#設計書) |
 
 ## 目次
 
 - [概要](#概要)
 - [アーキテクチャ](#アーキテクチャ)
+- [このツールで管理するRAGデータについて](#このツールで管理するragデータについて)
 - [動作環境](#動作環境)
 - [インストール](#インストール)
 - [使用例](#使用例)
@@ -82,6 +83,102 @@ Browser  ──REST──►  FastAPI (:8781)
 | Worker | 単一 GPU/CPU + lease | TTL 30s / heartbeat 10s |
 
 ベクトルは Qdrant だけが持ちます。SQLite は RAG / source / job / chunk メタデータと checkpoint の正本です。
+
+## このツールで管理するRAGデータについて
+
+変換後の知識ベースは **1 RAG = 1 フォルダ** ではありません。RAG 専用の `rag.toml` もなく、実体は **SQLite（制御と本文）+ Qdrant（ベクトル）** です。`data/` は git 管理外です。
+
+### ディスク上の置き場
+
+既定ルートはリポジトリ直下の `data/`（`DB2RAG_DATA_DIR` で変更可）。
+
+```text
+data/
+  db2rag.db              全 RAG の名簿・本文・ジョブ（SQLite WAL）
+  models/ruri-v3-310m/   Embedding モデル（全 RAG 共通）
+  uploads/<時刻>/        画面から入れたファイルのコピー
+  exports/<export_id>/   JSONL.zst 出力
+  qdrant_storage/        Docker Qdrant の collection 実体
+  mysql_data/            試験用 MySQL だけ（知識ベース本体ではない）
+  secrets.key            将来用。現在の lab 接続は source 行に保持
+```
+
+| パス | 役割 |
+|------|------|
+| `db2rag.db` | 表示名・ACL・ソースパス・parent/child テキスト・ジョブ履歴 |
+| `qdrant_storage/` | child の dense 768 + BM25。検索はここを alias 経由で見る |
+| `uploads/` | ブラウザ投入のコピー。元フォルダは再編成しない |
+| `exports/` | 手動「出力」の成果物 |
+| `models/` | Ruri の重み。RAG ごとには分けない |
+
+Qdrant を Docker で動かしているときは `docker-compose.yml` が `./data/qdrant_storage` を volume にします。埋め込み Qdrant（`DB2RAG_QDRANT_PATH`）のときはそのパスが実体です。
+
+### 1 つの RAG の論理構成
+
+識別子は `rag_id`（例: `rag_01M2…`）。表示名は UI 用です。
+
+```text
+Rag（例: 「AIに関する知識」）
+ └── Source × N     ファイル一式、または MySQL 接続（追記のたびに増える）
+      └── Object    ファイル 1 本、またはテーブル 1 つ
+           └── DocumentVersion（content_hash。同一 object で同じ中身は skip）
+                └── ParentChunk（長めの文脈・SQLite）
+                     └── ChildChunk ──► Qdrant Point（検索用）
+```
+
+| 層 | 持つもの |
+|----|----------|
+| SQLite `rags` | 名称、状態（`draft` / `active` / `purged`）、`qdrant_alias`、active collection 名 |
+| SQLite `sources` | `config_json`（ファイルパス一覧、または MySQL 接続） |
+| SQLite parent / child | **テキスト本文** |
+| Qdrant point | **ベクトル + payload**（`rag_id`、ACL、section_path、chunk id など） |
+
+検索は alias を叩き、ヒットした child の親文脈を SQLite から足します。ベクトルファイルが RAG フォルダに並ぶ形ではありません。
+
+Qdrant の名前:
+
+| 種類 | パターン |
+|------|----------|
+| 検索用 alias（安定名） | `db2rag_{rag_id}` |
+| 変換中 | `db2rag_{rag_id}_staging_{job_id}` |
+| 完了後 | その staging を active にし、alias を付け替える |
+
+Point ID は `child_chunk_id` からの UUID v5 です。同じ child の再 upsert は上書きになります。
+
+### 新規変換で何が起きるか
+
+1. `rags` を `draft` で作る
+2. `sources` + `source_objects` + `jobs` / `job_items` を切る
+3. ファイルは extract → 正規化 → Parent-Child chunk → Ruri（文書 prefix `検索文書: `）
+4. MySQL は行を論理文書にして同様（ディスクに行ファイルは作らない）
+5. staging collection へ upsert
+6. alias を staging に切替、`status=active`
+
+画面ドロップのファイルは `data/uploads/<時刻>/` にコピーされ、その絶対パスが `sources.config_json` に残ります。
+
+### 追記（追加）
+
+ウィザードで既存 RAG を選ぶと `mode=append` です。
+
+- **新しい Source を 1 本足す**（別のファイル束、または別の MySQL スナップショット）
+- その Source の Object だけを新しい Job で変換する
+- 同じ `object_id` で `content_hash` が同じ文書は skip（同一ジョブの再実行向け）
+- 別 Source として同じファイルを入れ直すと Object が別になるので、再 embed される
+
+SQLite 上は「1 RAG に Source が積み上がる」形です。Export もその RAG 配下の全 version / chunk を出します。
+
+**いまの実装の注意:** Job ごとに **空の staging collection を新規作成**し、完了時に alias をそこに切り替えます。旧 collection のベクトルは staging へコピーしていません。そのため **検索（Qdrant）は直近ジョブの点だけ**になり、以前の Source の本文は SQLite に残ってもヒットしにくくなります。設計上の世代切替は「旧+新を載せた collection を activate」する想定で、追記後の横断検索は今後の修正対象です。
+
+### 出力と削除
+
+Export は `data/exports/{export_id}/` に次を置きます。
+
+- `documents.jsonl.zst`
+- `chunks.jsonl.zst`
+- `manifest.json`（モデル revision、件数、alias）
+- `checksums.sha256`
+
+削除（一覧の「削除」）はジョブ停止 → Qdrant collection / alias 削除 → SQLite 関連行削除 → `uploads` と `exports` 配下のファイル削除、RAG は `purged` で一覧から消えます。`uploads` の外にある元ファイルは残します。復元はできません。
 
 ## 動作環境
 
@@ -319,7 +416,7 @@ uv run python TEST.py --hash-embed
 | Qdrant に繋がらない | Docker 未起動 | Docker Desktop を起動し `docker compose up -d` |
 | `TEST.py` の P2 golden 失敗 | モデル revision / prefix 不一致 | revision `18b60fb8…` と `検索文書: ` / `検索クエリ: ` を変えない |
 | GPU WARN | CUDA が無い | 仕様です。CPU FP32 のまま使う |
-| 検索 0 件 | ACL フィルタ、alias 切替前の失敗ジョブ | ACL を合わせる。ジョブが完了しているか見る |
+| 検索 0 件 | ACL フィルタ、alias 切替前の失敗、または追記後に旧 Source だけを探している | ACL とジョブ完了を確認。追記後の横断検索は [RAGデータ](#このツールで管理するragデータについて) の注意を参照 |
 | MySQL 1045 | パスワード誤り、または `caching_sha2` の平文 full auth | 試験用は `db2rag_ro`。再起動直後は TLS 再試行が入る |
 | ポート 8781 使用中 | 前の `serve` が残っている | Ctrl+C または PID を止める。タブを閉じただけでは止まらない |
 | 削除できない / 404 | 古い JS キャッシュ、または既に purged | `/` を Ctrl+F5。一覧に出ない RAG は削除済み |
