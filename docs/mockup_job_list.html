@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB2RAG モック — 変換ジョブ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mockup_cyber.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="mockup.html"><span class="brand-mark">R</span><span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span></a>
+    <span class="environment-pill"><span class="live-dot"></span>GPU WORKER / BUSY</span>
+    <span class="topbar-spacer"></span>
+    <div class="topbar-controls">
+      <div class="control-group"><span class="control-label" id="font-size-label">14px</span><button class="icon-button" id="font-minus" type="button" aria-label="文字を小さく">−</button><button class="icon-button" id="font-plus" type="button" aria-label="文字を大きく">＋</button></div>
+      <div class="control-group"><button class="icon-button" id="theme-toggle" type="button" aria-label="ライトモードに切り替える">🌙</button></div>
+    </div>
+  </header>
+
+  <button class="sidebar-balloon" id="sidebar-balloon" type="button">💬 メニュー</button>
+  <div class="shell">
+    <nav class="sidebar" id="sidebar" aria-label="メインナビゲーション">
+      <div class="sidebar-section">Knowledge</div>
+      <a class="nav-link" href="mockup.html"><span class="nav-icon">◈</span>RAG一覧</a>
+      <a class="nav-link" href="mockup_rag_create.html"><span class="nav-icon">＋</span>新規・追加</a>
+      <div class="sidebar-section">Operations</div>
+      <a class="nav-link active" href="mockup_job_list.html"><span class="nav-icon">⌁</span>変換ジョブ</a>
+      <a class="nav-link" href="mockup_search_preview.html"><span class="nav-icon">⌕</span>検索プレビュー</a>
+      <div class="sidebar-meta"><strong>Job Lease</strong>TTL 30s · heartbeat 10s · single GPU worker</div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を調整"><button class="collapse-button" id="collapse-sidebar" type="button" aria-label="サイドバーを折りたたむ">▼</button></div>
+
+    <main class="content">
+      <div class="mock-banner"><strong>APPROVED MOCK</strong> 2026-09-10 確定。固定データで取消・再開・retryの導線を示します。</div>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow">Conversion Jobs</div>
+          <h1>変換ジョブ</h1>
+          <p>discoverからactivateまでの永続ジョブを監視します。失敗itemだけを再試行できます。</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button secondary" type="button" data-toast="ジョブ一覧を更新しました" data-toast-detail="最終更新 15:24:18">↻ 更新</button>
+          <a class="button success" href="mockup_rag_create.html">＋ 新規変換</a>
+        </div>
+      </section>
+
+      <section class="grid metrics">
+        <article class="metric"><div class="metric-label">RUNNING</div><div class="metric-value">01</div><div class="metric-foot">GPU workerが処理中</div></article>
+        <article class="metric"><div class="metric-label">QUEUED</div><div class="metric-value">02</div><div class="metric-foot">推定開始 6分後</div></article>
+        <article class="metric"><div class="metric-label">COMPLETED TODAY</div><div class="metric-value">14</div><div class="metric-foot">うち警告付き 1件</div></article>
+        <article class="metric"><div class="metric-label">THROUGHPUT</div><div class="metric-value">82/s</div><div class="metric-foot">平均 embedding chunk</div></article>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>ジョブ履歴</h2>
+          <div class="filter-bar" style="margin: 0;">
+            <span class="filter-chip">状態: すべて</span>
+            <span class="filter-chip">過去24時間</span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ジョブ</th><th>RAG / モード</th><th>状態</th><th>進捗</th><th>開始・経過</th><th>Items</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="row-title job-id">job_01J8_6FX0</span><span class="row-subtitle">lease gpu-worker-01</span></td>
+                <td><span class="row-title">契約マスタKB</span><span class="row-subtitle">append · MySQL</span></td>
+                <td><span class="status-pill running">◔ RUNNING</span></td>
+                <td style="min-width: 170px;"><div class="progress-track"><div class="progress-bar" style="width: 67.3%;"></div></div><span class="row-subtitle mono">67.3% · ETA 06:12</span></td>
+                <td><span class="row-title mono">15:11:42</span><span class="row-subtitle">12分34秒</span></td>
+                <td class="mono">828 / 1,240</td>
+                <td><div class="inline-actions"><button class="button small" type="button" data-job-detail data-job-id="job_01J8_6FX0">詳細</button><button class="button small danger" type="button" data-toast="取消確認" data-toast-detail="現在のcheckpointは保持されます。">取消</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="row-title job-id">job_01J8_6FW4</span><span class="row-subtitle">file ingest</span></td>
+                <td><span class="row-title">人事規程KB</span><span class="row-subtitle">append · 18 files</span></td>
+                <td><span class="status-pill success">✓ COMPLETED</span></td>
+                <td><div class="progress-track"><div class="progress-bar" style="width: 100%;"></div></div><span class="row-subtitle mono">100% · verify 5/5</span></td>
+                <td><span class="row-title mono">14:18:04</span><span class="row-subtitle">8分21秒</span></td>
+                <td class="mono">18 / 18</td>
+                <td><div class="inline-actions"><button class="button small" type="button" data-job-detail data-job-id="job_01J8_6FW4">詳細</button><a class="button small secondary" href="mockup_search_preview.html">検索</a></div></td>
+              </tr>
+              <tr>
+                <td><span class="row-title job-id">job_01J8_6FQZ</span><span class="row-subtitle">file ingest</span></td>
+                <td><span class="row-title">製品FAQ</span><span class="row-subtitle">append · 42 files</span></td>
+                <td><span class="status-pill warning">⚠ COMPLETED</span></td>
+                <td><div class="progress-track"><div class="progress-bar" style="width: 97%;"></div></div><span class="row-subtitle mono">41 completed · 1 failed</span></td>
+                <td><span class="row-title mono">13:02:10</span><span class="row-subtitle">16分09秒</span></td>
+                <td class="mono">41 / 42</td>
+                <td><div class="inline-actions"><button class="button small warning" type="button" data-job-detail data-job-id="job_01J8_6FQZ">エラー</button><button class="button small secondary" type="button" data-toast="再試行を予約しました" data-toast-detail="失敗した1itemのみ再試行します。">Retry</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="row-title job-id">job_01J8_6FME</span><span class="row-subtitle">full reindex</span></td>
+                <td><span class="row-title">人事規程KB</span><span class="row-subtitle">reindex · staging</span></td>
+                <td><span class="status-pill danger">■ CANCELLED</span></td>
+                <td><div class="progress-track"><div class="progress-bar" style="width: 31%;"></div></div><span class="row-subtitle mono">checkpoint: chunked</span></td>
+                <td><span class="row-title mono">11:35:20</span><span class="row-subtitle">取消済み</span></td>
+                <td class="mono">5 / 18</td>
+                <td><div class="inline-actions"><button class="button small" type="button" data-job-detail data-job-id="job_01J8_6FME">詳細</button><button class="button small secondary" type="button" data-toast="ジョブを再開します" data-toast-detail="chunked checkpointから再開します。">再開</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="grid equal-two" style="margin-top: 16px;">
+        <section class="card">
+          <div class="card-title-row"><h2>GPUキュー</h2><span class="status-pill running">1 ACTIVE</span></div>
+          <div class="event-row"><span class="event-icon">1</span><div class="event-main"><strong>契約マスタKB · embedding</strong><span>batch 188/280 · VRAM 7.8GB · 82 chunk/s</span></div><span class="mono muted">現在</span></div>
+          <div class="event-row"><span class="event-icon">2</span><div class="event-main"><strong>製品FAQ · failed item retry</strong><span>parser再実行後にGPUキューへ投入</span></div><span class="mono muted">+6m</span></div>
+        </section>
+        <section class="card">
+          <div class="card-title-row"><h2>Worker状態</h2><span class="status-pill success">HEALTHY</span></div>
+          <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>heartbeat</strong><span>2秒前 · lease期限 28秒後</span></div></div>
+          <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>pipeline fingerprint</strong><span class="mono">sha256:74c1…9e2a</span></div></div>
+        </section>
+      </div>
+
+      <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 3 / 5</div>
+    </main>
+  </div>
+  <div class="job-hover" id="job-detail-overlay" hidden>
+    <div class="job-hover-card" role="dialog" aria-modal="true" aria-labelledby="job-hover-title">
+      <div class="job-hover-head">
+        <div>
+          <div class="eyebrow mono" id="job-hover-id">job_01J8_6FX0</div>
+          <h2 id="job-hover-title">進捗・エラー</h2>
+        </div>
+        <button class="icon-button" id="job-hover-close" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="job-hover-body">
+        <div class="progress-header">
+          <span class="status-pill running">◔ RUNNING</span>
+          <div class="progress-percent">67.3%</div>
+        </div>
+        <div class="progress-track" style="height: 10px;"><div class="progress-bar" style="width: 67.3%;"></div></div>
+        <div class="job-hover-section-title">item 進捗</div>
+        <div class="error-row"><span class="file-icon">✓</span><div class="file-main"><strong>hr.regulations</strong><span>completed · checkpoint verified</span></div><span class="status-pill success">completed</span></div>
+        <div class="error-row"><span class="file-icon">◔</span><div class="file-main"><strong>hr.faq_entries</strong><span>running · checkpoint embedded</span></div><span class="status-pill running">running</span></div>
+        <div class="error-row"><span class="file-icon">·</span><div class="file-main"><strong>hr.allowances</strong><span>pending · checkpoint discovered</span></div><span class="status-pill neutral">pending</span></div>
+        <div class="job-hover-section-title">エラー</div>
+        <div class="error-row"><span class="file-icon" style="background: var(--red-soft); color: var(--red);">!</span><div class="file-main"><strong>hr.faq_entries · ERR_MYSQL_ROW_DECODE</strong><span>不正な文字列を検出しました。checkpoint: extracted · retryable</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="mockup_cyber.js"></script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>2026-09-10 開発日記 - DB2RAG</title>
+<style>
+:root {
+  --gh-canvas: #0d1117; --gh-canvas-subtle: #161b22; --gh-canvas-inset: #010409;
+  --gh-border: #30363d; --gh-border-muted: #21262d; --gh-fg: #e6edf3;
+  --gh-fg-muted: #8b949e; --gh-fg-subtle: #6e7681; --gh-accent: #58a6ff;
+  --gh-accent-emphasis: #1f6feb; --gh-success: #3fb950; --gh-attention: #d29922;
+  --gh-danger: #f85149; --gh-done-bg: rgba(35, 134, 54, 0.15); --gh-code-bg: #161b22;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body.diary.diary-v2 {
+  margin: 0; padding: 32px 16px 64px; max-width: 1012px; margin-inline: auto;
+  background: var(--gh-canvas); color: var(--gh-fg);
+  font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+  font-size: 14px; line-height: 1.6;
+}
+.gh-repo-header { padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--gh-border); }
+.gh-repo-header .eyebrow { font-size: 12px; color: var(--gh-fg-muted); margin: 0 0 8px; }
+.gh-repo-header h1 { margin: 0 0 8px; font-size: 24px; font-weight: 600; color: var(--gh-accent); }
+.gh-repo-header .subtitle { margin: 0 0 16px; color: var(--gh-fg-muted); font-size: 14px; }
+.gh-repo-header .header-labels { display: flex; flex-wrap: wrap; gap: 6px; }
+.gh-label { display: inline-block; padding: 0 10px; font-size: 12px; font-weight: 500; line-height: 22px; border-radius: 2em; border: 1px solid transparent; }
+.gh-label-scope { background: rgba(136, 87, 255, 0.15); color: #a371f7; border-color: rgba(163, 113, 247, 0.4); }
+.gh-label-type { background: rgba(110, 118, 129, 0.2); color: var(--gh-fg-muted); border-color: var(--gh-border); }
+.gh-label-incident { background: rgba(248, 81, 73, 0.12); color: var(--gh-danger); border-color: rgba(248, 81, 73, 0.35); }
+.gh-label-ok { background: rgba(63, 185, 80, 0.15); color: var(--gh-success); border-color: rgba(63, 185, 80, 0.4); }
+.gh-label-warn { background: rgba(210, 153, 34, 0.15); color: var(--gh-attention); border-color: rgba(210, 153, 34, 0.4); }
+.gh-toc { margin-bottom: 24px; border: 1px solid var(--gh-border); border-radius: 6px; overflow: hidden; background: var(--gh-canvas-subtle); }
+.gh-toc-title { margin: 0; padding: 12px 16px; font-size: 14px; font-weight: 600; background: var(--gh-border-muted); border-bottom: 1px solid var(--gh-border); }
+.gh-toc table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gh-toc th { text-align: left; padding: 8px 16px; color: var(--gh-fg-muted); font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--gh-border); background: var(--gh-canvas-subtle); }
+.gh-toc td { padding: 10px 16px; border-bottom: 1px solid var(--gh-border-muted); vertical-align: middle; }
+.gh-toc tr:last-child td { border-bottom: none; }
+.gh-toc tr:hover td { background: rgba(88, 166, 255, 0.04); }
+.gh-toc td:first-child { font-family: ui-monospace, Consolas, monospace; color: var(--gh-fg-muted); white-space: nowrap; }
+.gh-entry { margin: 24px 0; padding: 20px; border: 1px solid var(--gh-border); border-radius: 6px; background: var(--gh-canvas-subtle); }
+.gh-entry h2 { margin: 0 0 12px; padding-bottom: 8px; font-size: 20px; font-weight: 600; border-bottom: 1px solid var(--gh-border); }
+.gh-entry-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; font-size: 12px; color: var(--gh-fg-muted); }
+.gh-entry-meta .commit-hash { font-family: ui-monospace, Consolas, monospace; padding: 2px 6px; background: var(--gh-code-bg); border: 1px solid var(--gh-border); border-radius: 4px; color: var(--gh-accent); }
+.gh-entry h3 { margin: 20px 0 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gh-fg-muted); }
+.gh-entry h3:first-of-type { margin-top: 0; }
+.gh-entry p { margin: 8px 0; }
+.gh-entry p.lead { color: var(--gh-fg-muted); font-size: 15px; }
+.gh-table-wrap { border: 1px solid var(--gh-border); border-radius: 6px; overflow: hidden; margin: 12px 0; }
+.gh-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gh-table th { text-align: left; padding: 8px 12px; background: var(--gh-border-muted); color: var(--gh-fg-muted); font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--gh-border); }
+.gh-table td { padding: 8px 12px; border-bottom: 1px solid var(--gh-border-muted); vertical-align: top; }
+.gh-table tr:last-child td { border-bottom: none; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; padding: 16px; background: var(--gh-canvas-inset); border: 1px solid var(--gh-border); border-radius: 6px; }
+.flow-box { padding: 8px 14px; background: var(--gh-canvas-subtle); border: 1px solid var(--gh-border); border-radius: 6px; font-size: 13px; font-weight: 500; }
+.flow-box.done { border-color: var(--gh-success); background: var(--gh-done-bg); color: var(--gh-success); }
+.flow-box.accent { border-color: var(--gh-accent-emphasis); color: var(--gh-accent); }
+.flow-arrow { color: var(--gh-fg-subtle); font-size: 16px; }
+.pipeline { margin: 12px 0; }
+.pipeline-step { display: flex; gap: 12px; align-items: flex-start; }
+.pipeline-marker { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; border: 2px solid var(--gh-border); background: var(--gh-canvas); }
+.pipeline-step.done .pipeline-marker { background: var(--gh-success); border-color: var(--gh-success); }
+.pipeline-step.active .pipeline-marker { background: var(--gh-accent); border-color: var(--gh-accent); }
+.pipeline-body { flex: 1; padding-bottom: 16px; border-left: 2px solid var(--gh-border); margin-left: 5px; padding-left: 20px; }
+.pipeline-step:last-child .pipeline-body { border-left-color: transparent; padding-bottom: 0; }
+.pipeline-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.pipeline-desc { font-size: 13px; color: var(--gh-fg-muted); margin: 0; }
+.diff-list { list-style: none; padding: 0; margin: 12px 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1px solid var(--gh-border); border-radius: 6px; overflow: hidden; }
+.diff-list li { padding: 4px 12px; border-bottom: 1px solid var(--gh-border-muted); display: flex; gap: 8px; }
+.diff-list li:last-child { border-bottom: none; }
+.diff-mark { width: 16px; font-weight: 700; flex-shrink: 0; }
+.diff-add { background: rgba(63, 185, 80, 0.08); } .diff-add .diff-mark { color: var(--gh-success); }
+.diff-mod { background: rgba(210, 153, 34, 0.06); } .diff-mod .diff-mark { color: var(--gh-attention); }
+.diff-del { background: rgba(248, 81, 73, 0.08); } .diff-del .diff-mark { color: var(--gh-danger); }
+.gh-callout { margin: 12px 0; padding: 12px 16px; border: 1px solid var(--gh-border); border-left: 3px solid var(--gh-accent-emphasis); border-radius: 0 6px 6px 0; background: rgba(88, 166, 255, 0.06); font-size: 13px; }
+.gh-callout.warn { border-left-color: var(--gh-attention); background: rgba(210, 153, 34, 0.06); }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 2px 6px; background: var(--gh-code-bg); border: 1px solid var(--gh-border); border-radius: 4px; }
+a { color: var(--gh-accent); text-decoration: none; } a:hover { text-decoration: underline; }
+strong { font-weight: 600; }
+footer.gh-footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--gh-border); font-size: 12px; color: var(--gh-fg-subtle); text-align: center; }
+</style>
+</head>
+<body class="diary diary-v2">
+
+<header class="gh-repo-header">
+  <p class="eyebrow">Development Log / 2026-09-10</p>
+  <h1>DB2RAG</h1>
+  <p class="subtitle">設計 → モック承認 → 実装 → lab 取り込み → 運用 UI 手直し（同日）</p>
+  <div class="header-labels">
+    <span class="gh-label gh-label-scope">DB2RAG</span>
+    <span class="gh-label gh-label-type">dev</span>
+    <span class="gh-label gh-label-ok">16 entries</span>
+  </div>
+</header>
+
+<section class="gh-entry" id="entry-day">
+  <h2>日次サマリ</h2>
+  <p class="lead">DB2RAG を設計（21 文書）→ サイバーテーマ5画面モック承認 → 実装（FastAPI :8781 / worker / TEST.py）→ lab MySQL シード取り込みまで同日完走。夕方はジョブ詳細パネル化、進捗ナビ廃止、<code>live.js</code> 構文修正、ウィザードのデモ除去と ACL 説明追加。</p>
+  <h3>作業フロー</h3>
+  <div class="flow">
+    <span class="flow-box done">設計 21 docs</span><span class="flow-arrow">→</span>
+    <span class="flow-box done">モック 5 画面</span><span class="flow-arrow">→</span>
+    <span class="flow-box done">IMPLEMENTATION READY</span><span class="flow-arrow">→</span>
+    <span class="flow-box done">実装 + TEST.py</span><span class="flow-arrow">→</span>
+    <span class="flow-box done">MySQL ingest</span><span class="flow-arrow">→</span>
+    <span class="flow-box accent">UI 手直し</span>
+  </div>
+  <h3>詰まったこと</h3>
+  <div class="gh-table-wrap"><table class="gh-table"><thead><tr><th>現象</th><th>原因</th><th>対応</th></tr></thead><tbody>
+    <tr><td>ウィザード「追加」でジョブが作られない</td><td>完了が <code>/jobs</code> リンクのみ</td><td><code>wizard-submit</code> + POST</td></tr>
+    <tr><td>MySQL 1045（ホストから）</td><td>PowerShell <code>mysql -e ALTER</code> でハッシュ破損</td><td>SQL ファイル <code>source</code> で再作成</td></tr>
+    <tr><td>進捗 67.3% 固定</td><td><code>escapeHtml</code> SyntaxError で <code>live.js</code> 全停止</td><td>構文修正 + 実 API ポーリング</td></tr>
+    <tr><td>入力元にデモ PDF 3件</td><td>モック HTML 固定行</td><td>空状態 + 実アップロード描画</td></tr>
+  </tbody></table></div>
+  <h3>次回やること</h3>
+  <ul>
+    <li>GPU 環境での NFR-002 スループット計測</li>
+    <li>Docling optional extra（PDF 品質）</li>
+    <li>盲検 80 問 eval Gate（G1〜G9）</li>
+    <li>ウィザード W5 容量見積を実 API へ</li>
+  </ul>
+</section>
+
+<section class="gh-toc">
+  <h2 class="gh-toc-title">Timeline</h2>
+  <table>
+    <thead><tr><th>時刻</th><th>概要</th><th>種別</th><th>Status</th><th>詳細</th></tr></thead>
+    <tbody>
+      <tr><td>15:18</td><td>設計書 21 文書作成</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1518">#1518</a></td></tr>
+      <tr><td>15:35</td><td>サイバーテーマ静的モック 8 画面</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1535">#1535</a></td></tr>
+      <tr><td>15:54</td><td>統合ウィザードへ画面整理</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1554">#1554</a></td></tr>
+      <tr><td>15:58</td><td>作成先の意図しない自動進行</td><td><span class="gh-label gh-label-incident">incident</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1558">#1558</a></td></tr>
+      <tr><td>16:06</td><td>UIモック承認・実装計画確定</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1606">#1606</a></td></tr>
+      <tr><td>16:55</td><td>実装・TEST.py・testdata</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1655">#1655</a></td></tr>
+      <tr><td>17:49</td><td>MySQL シード SQL 拡充</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1749">#1749</a></td></tr>
+      <tr><td>17:58</td><td>ウィザード未 POST 修正・取り込み</td><td><span class="gh-label gh-label-incident">incident</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-1758">#1758</a></td></tr>
+      <tr><td>20:08</td><td>ジョブ詳細ホバー・進捗ナビ削除</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2008">#2008</a></td></tr>
+      <tr><td>20:15</td><td>ACI 型パネル・検索ナビ整理</td><td><span class="gh-label gh-label-incident">incident</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2015">#2015</a></td></tr>
+      <tr><td>20:20</td><td>詳細はクリック時のみ</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2020">#2020</a></td></tr>
+      <tr><td>20:23</td><td>パネルを画面内に収める</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2023">#2023</a></td></tr>
+      <tr><td>20:39</td><td>live.js 構文エラー・進捗固定</td><td><span class="gh-label gh-label-incident">incident</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2039">#2039</a></td></tr>
+      <tr><td>21:00</td><td>入力元デモファイル除去</td><td><span class="gh-label gh-label-incident">incident</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2100">#2100</a></td></tr>
+      <tr><td>21:08</td><td>選択項目ホバー説明</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2108">#2108</a></td></tr>
+      <tr><td>21:31</td><td>開発日記整備（Vault）</td><td><span class="gh-label gh-label-type">dev</span></td><td><span class="gh-label gh-label-ok">ok</span></td><td><a href="#entry-2131">#2131</a></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<main>
+
+<section class="gh-entry entry" id="entry-1518">
+  <h2>15:18 — DB2RAG 設計書 21 文書作成</h2>
+  <div class="gh-entry-meta"><span class="gh-label gh-label-type">dev</span><span class="gh-label gh-label-scope">design</span><span class="gh-label gh-label-ok">ok</span><span class="commit-hash">pending</span></div>
+  <h3>概要</h3>
+  <p class="lead"><code>DB2RAG/docs/</code> に 00_overview 〜 20_open_questions。Ruri-v3-310m + Qdrant 1.19 hybrid + Parent-Child。AISSS 直結は非互換、API/export 連携を推奨。</p>
+  <h3>変更一覧</h3>
+  <ul class="diff-list">
+    <li class="diff-add"><span class="diff-mark">+</span> DB2RAG/docs/00_overview.md 〜 20_open_questions.md（21）</li>
+    <li class="diff-mod"><span class="diff-mark">M</span> .cursor/カタログ.html</li>
+  </ul>
+</section>
+
+<section class="gh-entry entry" id="entry-1655">
+  <h2>16:55 — DB2RAG 実装・TEST.py・testdata 検証</h2>
+  <div class="gh-entry-meta"><span class="gh-label gh-label-type">dev</span><span class="gh-label gh-label-scope">impl</span><span class="gh-label gh-label-ok">ok</span><span class="commit-hash">pending</span></div>
+  <h3>概要</h3>
+  <p class="lead">FastAPI :8781、SQLite WAL、Qdrant hybrid、Ruri FP32、5画面 UI、TEST.py（66.83s exit 0）。</p>
+  <h3>検証</h3>
+  <div class="gh-table-wrap"><table class="gh-table"><thead><tr><th>項目</th><th>方法</th><th>結果</th></tr></thead><tbody>
+    <tr><td>E2E</td><td><code>uv run python TEST.py</code></td><td>exit 0 / 66.83s</td></tr>
+    <tr><td>Golden embed</td><td>P2</td><td>pass</td></tr>
+    <tr><td>Hybrid 検索</td><td>有給・通勤手当・コアタイム等</td><td>ヒット</td></tr>
+    <tr><td>GPU</td><td>P5</td><td>WARN（CPU FP32 想定）</td></tr>
+  </tbody></table></div>
+</section>
+
+<section class="gh-entry entry" id="entry-1758">
+  <h2>17:58 — ウィザード未 POST を修正し MySQL シードを取り込み</h2>
+  <div class="gh-entry-meta"><span class="gh-label gh-label-incident">incident</span><span class="gh-label gh-label-scope">wizard</span><span class="gh-label gh-label-ok">ok</span></div>
+  <h3>作業フロー</h3>
+  <div class="pipeline">
+    <div class="pipeline-step done"><div class="pipeline-marker"></div><div class="pipeline-body"><div class="pipeline-title">症状</div><p class="pipeline-desc">「追加した」つもりでも POST /api/v1/jobs が無い</p></div></div>
+    <div class="pipeline-step done"><div class="pipeline-marker"></div><div class="pipeline-body"><div class="pipeline-title">原因</div><p class="pipeline-desc">完了ボタンが <code>&lt;a href="/jobs"&gt;</code></p></div></div>
+    <div class="pipeline-step done"><div class="pipeline-marker"></div><div class="pipeline-body"><div class="pipeline-title">対応</div><p class="pipeline-desc"><code>wizard-submit</code> + live.js POST → job completed → 検索ヒット確認</p></div></div>
+  </div>
+</section>
+
+<section class="gh-entry entry" id="entry-2039">
+  <h2>20:39 — live.js 構文エラーで進捗が動かない件</h2>
+  <div class="gh-entry-meta"><span class="gh-label gh-label-incident">incident</span><span class="gh-label gh-label-scope">ui</span><span class="gh-label gh-label-ok">ok</span></div>
+  <h3>概要</h3>
+  <p class="lead">モデルはロード済み・実行中ジョブ 0。<code>escapeHtml</code> の閉じ括弧欠落で <code>live.js</code> がパース失敗し、ジョブ画面がモック 67.3% 固定表示。</p>
+  <div class="gh-callout warn"><strong>見かけ上の症状</strong> — 「モデルが動いていない」「進捗が変わらない」に見えるが、実体は JS エラー + モック HTML 残存。</div>
+  <h3>変更一覧</h3>
+  <ul class="diff-list">
+    <li class="diff-mod"><span class="diff-mark">M</span> web/live.js（escapeHtml、bindJobs ポーリング、health/queue）</li>
+    <li class="diff-mod"><span class="diff-mark">M</span> web/jobs.html（モック KPI 除去）</li>
+    <li class="diff-mod"><span class="diff-mark">M</span> src/db2rag/pipeline.py（document 単位 progress）</li>
+  </ul>
+  <h3>検証</h3>
+  <div class="gh-table-wrap"><table class="gh-table"><thead><tr><th>項目</th><th>結果</th></tr></thead><tbody>
+    <tr><td><code>node --check web/live.js</code></td><td>pass</td></tr>
+    <tr><td><code>GET /api/v1/jobs</code> ポーリング</td><td>2s 間隔</td></tr>
+    <tr><td>RUNNING メトリクス</td><td>実ジョブ数（idle 時 00）</td></tr>
+  </tbody></table></div>
+</section>
+
+<section class="gh-entry entry" id="entry-2100">
+  <h2>21:00 — ウィザード入力元のデモファイルを除去</h2>
+  <div class="gh-entry-meta"><span class="gh-label gh-label-incident">incident</span><span class="gh-label gh-label-scope">wizard</span><span class="gh-label gh-label-ok">ok</span></div>
+  <p class="lead">人事制度マニュアル_v3.pdf 等3件の固定表示を削除。空 callout → 実アップロード結果のみ <code>#file-upload-list</code> に描画。</p>
+</section>
+
+<section class="gh-entry entry" id="entry-2108">
+  <h2>21:08 — ウィザード選択項目にホバー説明</h2>
+  <div class="gh-entry-meta"><span class="gh-label gh-label-type">dev</span><span class="gh-label gh-label-scope">wizard</span><span class="gh-label gh-label-ok">ok</span></div>
+  <p class="lead">ACL →「閲覧範囲（ACL）」、フォルダ再帰 →「サブフォルダも含める」。<code>.field-tip</code> でホバー説明。</p>
+  <div class="gh-callout"><strong>ACL</strong> — 検索結果に付ける「誰に見せてよいか」の印。internal / private / dept:HR など。</div>
+</section>
+
+<!-- 短縮エントリ（目次リンク用アンカー） -->
+<section class="gh-entry entry" id="entry-1535"><h2>15:35 — サイバーテーマ静的モック 8 画面</h2><p class="lead">S1〜S8 を 1 画面 1 HTML。共通シェル（テーマ・サイドバー・toast）。</p></section>
+<section class="gh-entry entry" id="entry-1554"><h2>15:54 — 統合ウィザードへ画面遷移整理</h2><p class="lead">5工程ウィザード。MySQL/ファイル分岐を1ページに統合。</p></section>
+<section class="gh-entry entry" id="entry-1558"><h2>15:58 — 作成先の意図しない自動進行</h2><p class="lead">W1 から <code>data-auto-next</code> を外し明示確定ボタン化。</p></section>
+<section class="gh-entry entry" id="entry-1606"><h2>16:06 — UIモック承認・実装計画確定</h2><p class="lead">IMPLEMENTATION READY。ADR-011 Accepted。</p></section>
+<section class="gh-entry entry" id="entry-1749"><h2>17:49 — MySQL シード SQL 拡充</h2><p class="lead">regulations 20 / faq_entries 10 / allowances 8。</p></section>
+<section class="gh-entry entry" id="entry-2008"><h2>20:08 — ジョブ詳細ホバー・進捗ナビ削除</h2><p class="lead">詳細で item 進捗表示。サイドバー「進捗・エラー」廃止。</p></section>
+<section class="gh-entry entry" id="entry-2015"><h2>20:15 — ACI 型パネル・検索ナビ整理</h2><p class="lead">全画面モーダル → ボタン横パネル。<code>/progress</code> → <code>/jobs</code>。</p></section>
+<section class="gh-entry entry" id="entry-2020"><h2>20:20 — 詳細はクリック時のみ</h2><p class="lead">mouseenter 廃止。クリック / 外側 / Esc で閉じる。</p></section>
+<section class="gh-entry entry" id="entry-2023"><h2>20:23 — パネルを画面内に収める</h2><p class="lead">topbar 下にクランプ、maxHeight を残り viewport に合わせる。</p></section>
+<section class="gh-entry entry" id="entry-2131"><h2>21:31 — 開発日記整備（Vault）</h2><p class="lead">ObsidianVault/90_DevLog/2026-09-10.md を追記・日次サマリ更新。</p></section>
+
+</main>
+
+<footer class="gh-footer">
+  <p>Cursor Dev Diary · style v2 (GitHub) · 2026-09-10 · 正本: ObsidianVault/90_DevLog/2026-09-10.md</p>
+</footer>
+</body>
+</html>

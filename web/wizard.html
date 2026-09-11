@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB2RAG — 新規・追加ウィザード</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mockup_cyber.css?v=20260911-5">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">R</span>
+      <span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span>
+    </a>
+    <span class="environment-pill"><span class="live-dot"></span>LOCAL / INGEST WIZARD</span>
+    <span class="topbar-spacer"></span>
+    <div class="topbar-controls">
+      <div class="control-group">
+        <span class="control-label" id="font-size-label">14px</span>
+        <button class="icon-button" id="font-minus" type="button" aria-label="文字を小さく">−</button>
+        <button class="icon-button" id="font-plus" type="button" aria-label="文字を大きく">＋</button>
+      </div>
+      <div class="control-group">
+        <button class="icon-button" id="theme-toggle" type="button" aria-label="ライトモードに切り替える">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <button class="sidebar-balloon" id="sidebar-balloon" type="button">💬 メニュー</button>
+  <div class="shell">
+    <nav class="sidebar" id="sidebar" aria-label="メインナビゲーション">
+      <div class="sidebar-section">Knowledge</div>
+      <a class="nav-link" href="/"><span class="nav-icon">◈</span>RAG一覧</a>
+      <a class="nav-link active" href="/wizard"><span class="nav-icon">＋</span>新規・追加</a>
+      <div class="sidebar-section">Operations</div>
+      <a class="nav-link" href="/jobs"><span class="nav-icon">⌁</span>変換ジョブ</a>
+      <a class="nav-link" href="/search"><span class="nav-icon">⌕</span>検索プレビュー</a>
+      <div class="sidebar-meta">
+        <strong>Guided Ingestion</strong>
+        作成先、入力方式、対象、容量を上から順に確定します。
+      </div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を調整">
+      <button class="collapse-button" id="collapse-sidebar" type="button" aria-label="サイドバーを折りたたむ">▼</button>
+    </div>
+
+    <main class="content">
+      <div class="mock-banner"><strong>APPROVED MOCK</strong> 2026-09-10 確定。工程確定で帯へ畳み、完了帯の▼から選択し直せます。</div>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow">Create / Append Wizard</div>
+          <h1>新規作成・データ追加</h1>
+          <p>MySQL接続、テーブル選択、ファイル投入をひとつのウィザードに統合しました。</p>
+        </div>
+        <a class="button secondary" href="/">← RAG一覧へ</a>
+      </section>
+
+      <div class="wizard-layout">
+        <div class="wizard-stack">
+          <section class="wizard-section is-open" data-wizard-step="1">
+            <button class="wizard-summary" type="button" data-wizard-toggle aria-expanded="true">
+              <span class="wizard-step-index">01</span>
+              <span><span class="wizard-summary-title">作成先</span><span class="wizard-summary-subtitle">新規RAGまたは既存RAGへの追加</span></span>
+              <span class="wizard-summary-value" data-wizard-summary>未確定</span>
+              <span class="wizard-chevron">▼</span>
+            </button>
+            <div class="wizard-panel">
+              <div class="wizard-panel-inner">
+                <div class="wizard-panel-content">
+                  <div class="wizard-choice-grid">
+                    <article class="choice-card selected" data-choice-group="rag-mode" data-choice-value="new">
+                      <div class="choice-head"><span class="radio-dot"></span>新規RAGを作成</div>
+                      <p>新しいaliasと知識コレクションを作成します。</p>
+                      <p class="field-tip">これから入れる文書専用の知識ベースを新しく作ります。名前と閲覧範囲をここで決めます。</p>
+                    </article>
+                    <article class="choice-card" data-choice-group="rag-mode" data-choice-value="append">
+                      <div class="choice-head"><span class="radio-dot"></span>既存RAGに追加</div>
+                      <p>既存の埋め込みは維持し、新しいsourceを追加します。</p>
+                      <p class="field-tip">すでに作った知識ベースへ、今回の文書やテーブルだけを足します。以前の検索データは消えません。</p>
+                    </article>
+                  </div>
+
+                  <div class="branch-panel" data-branch-group="rag-mode" data-branch-value="new" style="margin-top: 16px;">
+                    <div class="form-grid">
+                      <div class="field">
+                        <label for="rag-name">新しいRAG名</label>
+                        <input id="rag-name" value="社内ナレッジ 2026">
+                        <p class="field-tip">一覧や検索画面に出る知識ベースの名前です。中身の識別には使いません。</p>
+                      </div>
+                      <div class="field">
+                        <label for="new-rag-acl">閲覧範囲（ACL）</label>
+                        <select id="new-rag-acl">
+                          <option title="社内の利用者なら検索できます">internal — 社内一般</option>
+                          <option title="作成した本人だけが検索できます">private — 作成者のみ</option>
+                          <option title="人事部向けの検索にだけ出します">dept:HR — 人事部</option>
+                        </select>
+                        <p class="field-tip">ACLは「誰にこの文書を見せてよいか」の印です。検索時に同じ印を持つ結果だけが出ます。internal＝社内、private＝自分だけ、dept:HR＝人事部だけ。</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="branch-panel" data-branch-group="rag-mode" data-branch-value="append" hidden style="margin-top: 16px;">
+                    <div class="field">
+                      <label for="existing-rag">追加先の既存RAG</label>
+                      <select id="existing-rag"><option>人事規程KB</option><option>契約マスタKB</option><option>製品FAQ</option></select>
+                      <p class="field-tip">データを足す先の知識ベースです。埋め込みのモデル設定と閲覧範囲の規則は、選んだRAGのものを引き継ぎます。</p>
+                    </div>
+                  </div>
+
+                  <div class="wizard-actions">
+                    <button class="button success" type="button" data-wizard-next>この作成先で進む</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="wizard-section is-locked" data-wizard-step="2">
+            <button class="wizard-summary" type="button" data-wizard-toggle aria-expanded="false">
+              <span class="wizard-step-index">02</span>
+              <span><span class="wizard-summary-title">追加する方式</span><span class="wizard-summary-subtitle">MySQLまたはファイル / フォルダ</span></span>
+              <span class="wizard-summary-value" data-wizard-summary>前の項目を確定してください</span>
+              <span class="wizard-chevron">▼</span>
+            </button>
+            <div class="wizard-panel">
+              <div class="wizard-panel-inner">
+                <div class="wizard-panel-content">
+                  <div class="wizard-choice-grid">
+                    <article class="choice-card selected" data-choice-group="source-type" data-choice-value="mysql" data-auto-next="true">
+                      <span class="source-icon">▦</span>
+                      <div class="choice-head"><span class="radio-dot"></span>MySQLから追加</div>
+                      <p>READ ONLY接続後、テーブル・ビュー・保存SQLを選択します。</p>
+                      <p class="field-tip">業務データベースを読み取り専用でつなぎ、選んだ表の行を検索用の文章にします。書き込みはしません。</p>
+                    </article>
+                    <article class="choice-card" data-choice-group="source-type" data-choice-value="file" data-auto-next="true">
+                      <span class="source-icon">⇧</span>
+                      <div class="choice-head"><span class="radio-dot"></span>ファイルを投入</div>
+                      <p>PDF、DOCX、XLSX、CSV、TXT、MDまたはフォルダを追加します。</p>
+                      <p class="field-tip">手元の文書ファイルを取り込みます。原本は動かさず、コピー（snapshot）を作ってから変換します。</p>
+                    </article>
+                  </div>
+                  <div class="wizard-actions">
+                    <button class="button secondary" type="button" data-wizard-back="1">← 作成先へ戻る</button>
+                    <button class="button success" type="button" data-wizard-next>この方式で進む</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="wizard-section is-locked" data-wizard-step="3">
+            <button class="wizard-summary" type="button" data-wizard-toggle aria-expanded="false">
+              <span class="wizard-step-index">03</span>
+              <span><span class="wizard-summary-title">入力元</span><span class="wizard-summary-subtitle">接続確認またはファイルsnapshot</span></span>
+              <span class="wizard-summary-value" data-wizard-summary>前の項目を確定してください</span>
+              <span class="wizard-chevron">▼</span>
+            </button>
+            <div class="wizard-panel">
+              <div class="wizard-panel-inner">
+                <div class="wizard-panel-content">
+                  <div class="branch-panel" data-branch-group="source-type" data-branch-value="mysql">
+                    <div class="card-title-row"><h2>MySQL接続</h2><span class="status-pill success">READ ONLY</span></div>
+                    <div class="form-grid">
+                      <div class="field"><label for="host">ホスト</label><input id="host" value="127.0.0.1"><p class="field-tip">MySQLが動いているコンピュータの住所です。このPCなら 127.0.0.1 です。</p></div>
+                      <div class="field"><label for="port">ポート</label><input id="port" value="3307"><p class="field-tip">接続先の窓口番号です。lab の DB2RAG 用 MySQL は 3307 です（通常の 3306 ではありません）。</p></div>
+                      <div class="field"><label for="username">ユーザ</label><input id="username" value="db2rag_ro"><p class="field-tip">読み取り専用のログイン名です。取り込みはこのユーザで SELECT だけします。</p></div>
+                      <div class="field"><label for="password">パスワード</label><div class="input-with-action"><input id="password" type="password" value="db2rag_ro"><button class="button icon-only secondary" type="button" id="mysql-copy-uri" data-copy="mysql://db2rag_ro:***@127.0.0.1:3307/hr">📋</button></div><p class="field-tip">上のユーザのパスワードです。画面には出ますが、ログには残しません。</p></div>
+                      <div class="field"><label for="database">データベース</label><input id="database" value="hr"><p class="field-tip">取り込む表が入っているデータベース名です。例: hr</p></div>
+                      <div class="field">
+                        <label for="ssl-mode">SSL</label>
+                        <select id="ssl-mode">
+                          <option selected title="通信を暗号化しません。同一マシンや lab 向けです">DISABLED</option>
+                          <option title="暗号化は必須。証明書の中身までは確認しません">REQUIRED</option>
+                          <option title="暗号化し、証明書のホスト名まで確認します">VERIFY_IDENTITY</option>
+                        </select>
+                        <p class="field-tip">通信を暗号化するかどうかです。このPC上の lab MySQL なら DISABLED で足ります（MySQL 8 の認証で必要なときだけ、認証時に自動で TLS に切り替えます）。社内サーバへ出すときは REQUIRED 以上にしてください。</p>
+                      </div>
+                    </div>
+                    <div class="diagnostic" id="mysql-diag" style="margin-top: 14px;"><span class="diagnostic-icon">·</span><div><strong>接続診断 未実行</strong><span>「入力元を確定」で接続してから結果を出します。</span></div></div>
+                  </div>
+
+                  <div class="branch-panel" data-branch-group="source-type" data-branch-value="file" hidden>
+                    <div class="dropzone" id="file-dropzone" tabindex="0" style="min-height: 200px;">
+                      <div>
+                        <div class="dropzone-icon">⇧</div>
+                        <h2>ファイルまたはフォルダをドロップ</h2>
+                        <p>原本を変更せず、SHA-256付きsnapshotを作成します。</p>
+                        <div class="button-row" style="justify-content: center;">
+                          <button class="button" type="button" id="pick-files">ファイルを選択</button>
+                          <button class="button secondary" type="button" id="pick-folder">フォルダを選択</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="compact-object-list" id="file-upload-list" data-file-count="0" style="margin-top: 12px;">
+                      <div class="callout">まだファイルはありません。選択またはドロップしてください。</div>
+                    </div>
+                  </div>
+
+                  <div class="wizard-actions">
+                    <button class="button secondary" type="button" data-wizard-back="2">← 方式へ戻る</button>
+                    <button class="button success" type="button" data-wizard-next>入力元を確定</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="wizard-section is-locked" data-wizard-step="4">
+            <button class="wizard-summary" type="button" data-wizard-toggle aria-expanded="false">
+              <span class="wizard-step-index">04</span>
+              <span><span class="wizard-summary-title">取り込み対象</span><span class="wizard-summary-subtitle">DBオブジェクトまたはファイル設定</span></span>
+              <span class="wizard-summary-value" data-wizard-summary>前の項目を確定してください</span>
+              <span class="wizard-chevron">▼</span>
+            </button>
+            <div class="wizard-panel">
+              <div class="wizard-panel-inner">
+                <div class="wizard-panel-content">
+                  <div class="branch-panel" data-branch-group="source-type" data-branch-value="mysql">
+                    <div class="card-title-row"><h2>テーブル・ビュー・保存SQL</h2><span class="tag success" id="mysql-object-count">接続後に列挙</span></div>
+                    <div class="compact-object-list" id="mysql-object-list">
+                      <div class="callout">入力元で接続が成功すると、ここにテーブル・ビューが列挙されます。</div>
+                    </div>
+                    <div class="form-grid" style="margin-top: 14px;">
+                      <div class="field">
+                        <label for="template">論理文書テンプレート</label>
+                        <select id="template">
+                          <option title="規程・条文向けの文章の組み立て方です">regulation_v1</option>
+                          <option title="質問と回答の対向けの文章の組み立て方です">faq_v1</option>
+                        </select>
+                        <p class="field-tip">表の1行を、検索用の文章に組み立てるひな形です。規程なら regulation_v1、FAQ なら faq_v1 です。</p>
+                      </div>
+                      <div class="field">
+                        <label for="mysql-acl">閲覧範囲（ACL）</label>
+                        <select id="mysql-acl">
+                          <option title="社内の利用者なら検索できます">internal — 社内一般</option>
+                          <option title="作成した本人だけが検索できます">private — 作成者のみ</option>
+                          <option title="人事部向けの検索にだけ出します">dept:HR — 人事部</option>
+                        </select>
+                        <p class="field-tip">ACLは「誰にこの文書を見せてよいか」の印です。ここで付けた印と、検索側の印が重なるものだけがヒットします。</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="branch-panel" data-branch-group="source-type" data-branch-value="file" hidden>
+                    <div class="card-title-row"><h2>ファイル設定</h2><span class="tag success" id="file-scope-tag">0ファイル</span></div>
+                    <div class="form-grid">
+                      <div class="field">
+                        <label for="file-acl">閲覧範囲（ACL）</label>
+                        <select id="file-acl">
+                          <option title="作成した本人だけが検索できます">private — 作成者のみ</option>
+                          <option title="社内の利用者なら検索できます">internal — 社内一般</option>
+                          <option title="人事部向けの検索にだけ出します">dept:HR — 人事部</option>
+                        </select>
+                        <p class="field-tip">ACLは「誰にこの文書を見せてよいか」の印です。ファイル投入の初期値は private（自分だけ）です。社内共有するなら internal に変えてください。</p>
+                      </div>
+                      <div class="field">
+                        <label for="folder-depth">サブフォルダも含める</label>
+                        <select id="folder-depth">
+                          <option title="選んだフォルダの中のフォルダまでたどります。最大20階層">有効 · 最大20階層</option>
+                          <option title="選んだフォルダの直下にあるファイルだけです">無効 · 直下のみ</option>
+                        </select>
+                        <p class="field-tip">フォルダを選んだとき、中のフォルダまで入ってファイルを集めるかどうかです。有効＝入れ子まで最大20階層。無効＝今のフォルダ直下だけ。.git や exe は取り込みません。</p>
+                      </div>
+                    </div>
+                    <div class="toggle-row">
+                      <div class="toggle-copy"><strong>低品質PDFをOCR</strong><span>未実装。スキャンPDFは現在取り込めません。</span></div>
+                      <span class="switch is-disabled" id="ocr-switch" aria-disabled="true" title="OCR は未実装です"></span>
+                      <p class="field-tip">文字がほとんど取れないスキャンPDFのページだけ、画像から文字を読む予定です。まだ配線していません。</p>
+                    </div>
+                    <div class="callout warning" style="margin-top: 12px;">マクロ付きOffice、remote HTML、symlink、実行形式は取り込みません。</div>
+                  </div>
+
+                  <div class="wizard-actions">
+                    <button class="button secondary" type="button" data-wizard-back="3">← 入力元へ戻る</button>
+                    <button class="button success" type="button" data-wizard-next>対象を確定して容量計算</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="wizard-section is-locked" data-wizard-step="5">
+            <button class="wizard-summary" type="button" data-wizard-toggle aria-expanded="false">
+              <span class="wizard-step-index">05</span>
+              <span><span class="wizard-summary-title">確認・変換開始</span><span class="wizard-summary-subtitle">容量、処理方式、追加先を最終確認</span></span>
+              <span class="wizard-summary-value" data-wizard-summary>前の項目を確定してください</span>
+              <span class="wizard-chevron">▼</span>
+            </button>
+            <div class="wizard-panel">
+              <div class="wizard-panel-inner">
+                <div class="wizard-panel-content">
+                  <div class="wizard-final">
+                    <h3>変換を開始できます</h3>
+                    <p>選択内容のsnapshotを作成し、discover → normalize → Parent-Child chunk → Ruri/BM25 → verify → activate の順で処理します。</p>
+                  </div>
+                  <div class="grid metrics" style="margin: 14px 0 0;">
+                    <article class="metric"><div class="metric-label">SOURCE OBJECTS</div><div class="metric-value" id="w5-objects">—</div><div class="metric-foot" id="w5-objects-foot">対象確定後に算出</div></article>
+                    <article class="metric"><div class="metric-label">EST. RECORDS</div><div class="metric-value" id="w5-records">—</div><div class="metric-foot" id="w5-records-foot">対象確定後に算出</div></article>
+                    <article class="metric"><div class="metric-label">EST. CHUNKS</div><div class="metric-value" id="w5-chunks">—</div><div class="metric-foot" id="w5-chunks-foot">Parent-Child v1</div></article>
+                    <article class="metric"><div class="metric-label">EST. STORAGE</div><div class="metric-value" id="w5-storage">—</div><div class="metric-foot" id="w5-storage-foot">quick factor 1.6</div></article>
+                  </div>
+                  <div class="callout">外部Embedding APIは使用しません。単一GPU workerがFP32で処理します。</div>
+                  <div class="wizard-actions">
+                    <button class="button secondary" type="button" data-wizard-back="4">← 対象を見直す</button>
+                    <button class="button secondary" type="button" id="wizard-draft" disabled title="下書き保存は未実装です">下書き保存</button>
+                    <button class="button success" type="button" id="wizard-submit">変換ジョブを作成 →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="wizard-side">
+          <section class="card">
+            <div class="card-title-row"><h2>選択内容</h2><span class="status-pill running">編集中</span></div>
+            <div class="summary-list">
+              <div class="summary-row"><span>モード</span><strong id="overview-mode">新規RAGを作成</strong></div>
+              <div class="summary-row"><span>作成先</span><strong id="overview-target">社内ナレッジ 2026</strong></div>
+              <div class="summary-row"><span>入力方式</span><strong id="overview-source">MySQL</strong></div>
+              <div class="summary-row"><span>対象</span><strong id="overview-scope">2オブジェクト</strong></div>
+              <div class="summary-row"><span>容量見積</span><strong id="overview-size">86.2 MB</strong></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-title-row"><h2>固定プロファイル</h2></div>
+            <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>Ruri-v3-310m</strong><span>768 dim · FP32 · L2 normalized</span></div></div>
+            <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>Hybrid retrieval</strong><span>Dense + BM25 + RRF</span></div></div>
+            <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>Local only</strong><span>外部API送信なし</span></div></div>
+          </section>
+
+          <div class="callout">完了した帯を▼で開き、選択し直せます。変更後は後続工程を再確認します。</div>
+        </aside>
+      </div>
+
+      <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 2 / 5</div>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="mockup_cyber.js?v=20260911-5"></script>
+  <script src="live.js?v=20260911-5"></script>
+</body>
+</html>

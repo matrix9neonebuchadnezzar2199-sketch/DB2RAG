@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB2RAG — 検索プレビュー</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mockup_cyber.css?v=20260911-5">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">R</span><span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span></a>
+    <span class="environment-pill"><span class="live-dot"></span>HYBRID SEARCH / READY</span>
+    <span class="topbar-spacer"></span>
+    <div class="topbar-controls">
+      <div class="control-group"><span class="control-label" id="font-size-label">14px</span><button class="icon-button" id="font-minus" type="button" aria-label="文字を小さく">−</button><button class="icon-button" id="font-plus" type="button" aria-label="文字を大きく">＋</button></div>
+      <div class="control-group"><button class="icon-button" id="theme-toggle" type="button" aria-label="ライトモードに切り替える">🌙</button></div>
+    </div>
+  </header>
+
+  <button class="sidebar-balloon" id="sidebar-balloon" type="button">💬 メニュー</button>
+  <div class="shell">
+    <nav class="sidebar" id="sidebar" aria-label="メインナビゲーション">
+      <div class="sidebar-section">Knowledge</div>
+      <a class="nav-link" href="/"><span class="nav-icon">◈</span>RAG一覧</a>
+      <a class="nav-link" href="/wizard"><span class="nav-icon">＋</span>新規・追加</a>
+      <div class="sidebar-section">Operations</div>
+      <a class="nav-link" href="/jobs"><span class="nav-icon">⌁</span>変換ジョブ</a>
+      <a class="nav-link active" href="/search"><span class="nav-icon">⌕</span>検索プレビュー</a>
+      <div class="sidebar-meta"><strong>Search Profile</strong>dense 40 + sparse 40 · RRF k=60 · top_k=10</div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を調整"><button class="collapse-button" id="collapse-sidebar" type="button" aria-label="サイドバーを折りたたむ">▼</button></div>
+
+    <main class="content">
+      <div class="mock-banner"><strong>APPROVED MOCK</strong> 2026-09-10 確定。検索結果はサンプルで、reranker・生成回答は含みません。</div>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow">Retrieval Verification</div>
+          <h1>検索プレビュー</h1>
+          <p>Dense（Ruri）と日本語BM25をRRFで融合し、変換後の検索品質をその場で確認します。</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button secondary" type="button" data-copy="http://127.0.0.1:8781/api/v1/search">📋 API</button>
+          <button class="button secondary" type="button" id="eval-save" disabled title="評価セット保存は未実装です">評価セットへ保存</button>
+        </div>
+      </section>
+
+      <div class="grid two">
+        <section>
+          <div class="card">
+            <div class="field">
+              <label for="rag-select">検索対象RAG</label>
+              <select id="rag-select"><option>人事規程KB · 12,418 chunks</option><option>契約マスタKB · 8,120 chunks</option><option>製品FAQ · 7,382 chunks</option></select>
+            </div>
+            <div class="search-box" style="margin-top: 13px;">
+              <input value="有給休暇の申請期限はいつですか？" aria-label="検索クエリ">
+              <button class="button success" type="button">⌕ 検索</button>
+            </div>
+            <div class="filter-bar">
+              <span class="filter-chip" id="chip-source">source: すべて</span>
+              <span class="filter-chip" id="chip-acl">ACL: RAG既定</span>
+              <span class="filter-chip" id="chip-topk">top_k: 10</span>
+              <span class="filter-chip" id="chip-threshold">threshold: 0.00</span>
+              <span class="filter-chip" id="chip-parent">親文脈: ON</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin: 18px 2px 10px;">
+            <strong id="search-result-heading">検索結果</strong>
+            <span class="muted mono" id="search-result-timing">未検索</span>
+          </div>
+          <div id="search-results"></div>
+          <div class="callout" id="search-empty">まだ検索していません。クエリを入れて ⌕ 検索または Enter を押してください。</div>
+          <div class="callout">scoreはRRF正規化後の類似度であり、回答の正しさを示す確率ではありません。</div>
+        </section>
+
+        <aside class="grid">
+          <section class="card">
+            <div class="card-title-row"><h2>検索フィルター</h2><button class="button small secondary" type="button" id="search-filter-reset">リセット</button></div>
+            <div class="field"><label for="source-type">ソース種別</label><select id="source-type"><option>すべて</option><option>file</option><option>mysql</option></select></div>
+            <div class="field" style="margin-top: 11px;"><label for="acl-filter">ACL</label><select id="acl-filter"><option>internal</option><option>private</option><option>dept:HR</option></select></div>
+            <div class="field" style="margin-top: 11px;"><label for="mime-filter">形式</label><select id="mime-filter" disabled title="形式フィルタは未実装です"><option>すべての形式</option><option>PDF</option><option>DOCX</option><option>MySQL record</option></select></div>
+            <div class="field" style="margin-top: 11px;"><label for="section-filter">見出し階層</label><input id="section-filter" placeholder="例: 第5章 > 休暇" disabled title="見出しフィルタは未実装です"></div>
+            <div class="toggle-row"><div class="toggle-copy"><strong>Hybrid検索</strong><span>Dense + BM25 + RRF。既定ON。</span></div><span class="switch on" id="hybrid-switch"></span></div>
+            <div class="toggle-row"><div class="toggle-copy"><strong>Parent展開</strong><span>結果に親文脈を付与します。</span></div><span class="switch on" id="parent-switch"></span></div>
+          </section>
+
+          <section class="card">
+            <div class="card-title-row"><h2>Retrieval内訳</h2><span class="status-pill" id="search-explain-ms">未検索</span></div>
+            <div class="search-explain">
+              <div class="explain-item"><span>Dense候補</span><strong>40</strong></div>
+              <div class="explain-item"><span>BM25候補</span><strong>40</strong></div>
+              <div class="explain-item"><span>RRF k</span><strong>60</strong></div>
+            </div>
+            <div class="diagnostic" style="margin-top: 12px;"><span class="diagnostic-icon">✓</span><div><strong>Query prefix</strong><span class="mono">検索クエリ: {query}</span></div></div>
+            <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>ACL filter</strong><span id="search-explain-acl">検索時に確定</span></div></div>
+            <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>Reranker</strong><span>OFF · 本ツールのスコープ外</span></div></div>
+          </section>
+
+          <section class="card">
+            <div class="card-title-row"><h2>ローカルAI接続</h2><span class="tag">AISSS優先</span></div>
+            <div class="field">
+              <label>検索API</label>
+              <div class="input-with-action"><input class="mono" value="127.0.0.1:8781/api/v1/search" readonly><button class="button icon-only secondary" type="button" data-copy="http://127.0.0.1:8781/api/v1/search">📋</button></div>
+            </div>
+            <p class="helper">推奨: DB2RAG検索API。Qdrant直結は同一Ruri revisionの場合のみ。</p>
+          </section>
+        </aside>
+      </div>
+
+      <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 5 / 5</div>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="mockup_cyber.js?v=20260911-5"></script>
+  <script src="live.js?v=20260911-5"></script>
+</body>
+</html>

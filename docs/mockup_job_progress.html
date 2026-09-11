@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB2RAG モック — 進捗ダッシュボード</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mockup_cyber.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="mockup.html"><span class="brand-mark">R</span><span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span></a>
+    <span class="environment-pill"><span class="live-dot"></span>JOB RUNNING / SSE LIVE</span>
+    <span class="topbar-spacer"></span>
+    <div class="topbar-controls">
+      <div class="control-group"><span class="control-label" id="font-size-label">14px</span><button class="icon-button" id="font-minus" type="button" aria-label="文字を小さく">−</button><button class="icon-button" id="font-plus" type="button" aria-label="文字を大きく">＋</button></div>
+      <div class="control-group"><button class="icon-button" id="theme-toggle" type="button" aria-label="ライトモードに切り替える">🌙</button></div>
+    </div>
+  </header>
+
+  <button class="sidebar-balloon" id="sidebar-balloon" type="button">💬 メニュー</button>
+  <div class="shell">
+    <nav class="sidebar" id="sidebar" aria-label="メインナビゲーション">
+      <div class="sidebar-section">Knowledge</div>
+      <a class="nav-link" href="mockup.html"><span class="nav-icon">◈</span>RAG一覧</a>
+      <a class="nav-link" href="mockup_rag_create.html"><span class="nav-icon">＋</span>新規・追加</a>
+      <div class="sidebar-section">Operations</div>
+      <a class="nav-link active" href="mockup_job_list.html"><span class="nav-icon">⌁</span>変換ジョブ</a>
+      <a class="nav-link" href="mockup_search_preview.html"><span class="nav-icon">⌕</span>検索プレビュー</a>
+      <div class="sidebar-meta"><strong>Weighted Progress</strong>work unit · EWMA ETA · update 2s</div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を調整"><button class="collapse-button" id="collapse-sidebar" type="button" aria-label="サイドバーを折りたたむ">▼</button></div>
+
+    <main class="content">
+      <div class="mock-banner"><strong>APPROVED MOCK</strong> 2026-09-10 確定。進捗は固定サンプルで、実装ではSSEで2秒ごとに更新します。</div>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow mono">job_01J8_6FX0</div>
+          <h1>契約マスタKBを変換中</h1>
+          <p>MySQL source <span class="mono">hr.employee_contracts</span> · append mode · lease: gpu-worker-01</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button secondary" type="button" data-copy="job_01J8_6FX0">📋 ID</button>
+          <button class="button danger" type="button" data-toast="ジョブ取消確認" data-toast-detail="現在のcheckpointは保持され、後で再開できます。">■ 取消</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="progress-header">
+          <div>
+            <span class="status-pill running">◔ EMBEDDING</span>
+            <div class="helper">現在: 契約番号 CTR-2026-00821 · child 3/5</div>
+          </div>
+          <div class="progress-percent">67.3%</div>
+        </div>
+        <div class="progress-track" style="height: 14px;"><div class="progress-bar" style="width: 67.3%;"></div></div>
+        <div class="progress-stats">
+          <div class="progress-stat"><span>経過時間</span><strong>00:12:34</strong></div>
+          <div class="progress-stat"><span>推定残り時間</span><strong>約 06:12</strong></div>
+          <div class="progress-stat"><span>完了 / 全item</span><strong>828 / 1,240</strong></div>
+          <div class="progress-stat"><span>Embedding速度</span><strong>82 chunk/s</strong></div>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <div class="card-title-row"><h2>パイプライン</h2><span class="muted">checkpoint: embedded</span></div>
+        <div class="pipeline">
+          <div class="pipeline-stage complete">discover</div>
+          <div class="pipeline-stage complete">snapshot</div>
+          <div class="pipeline-stage complete">extract</div>
+          <div class="pipeline-stage complete">normalize</div>
+          <div class="pipeline-stage complete">chunk</div>
+          <div class="pipeline-stage active">embed</div>
+          <div class="pipeline-stage">upsert</div>
+          <div class="pipeline-stage">verify</div>
+          <div class="pipeline-stage">activate</div>
+        </div>
+      </section>
+
+      <div class="grid two" style="margin-top: 16px;">
+        <section class="card">
+          <div class="card-title-row">
+            <h2>item処理状況</h2>
+            <span class="tag">最新5件</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>対象</th><th>Checkpoint</th><th>Chunks</th><th>時間</th><th>状態</th></tr></thead>
+              <tbody>
+                <tr><td><span class="row-title">CTR-2026-00820</span><span class="row-subtitle">row hash 72bd…</span></td><td class="mono">upserted</td><td class="mono">4</td><td class="mono">0.48s</td><td><span class="status-pill success">完了</span></td></tr>
+                <tr><td><span class="row-title">CTR-2026-00821</span><span class="row-subtitle">long_text 1,420 chars</span></td><td class="mono">embedded</td><td class="mono">3 / 5</td><td class="mono">0.31s</td><td><span class="status-pill running">処理中</span></td></tr>
+                <tr><td><span class="row-title">CTR-2026-00822</span><span class="row-subtitle">queued</span></td><td class="mono">chunked</td><td class="mono">6</td><td class="mono">—</td><td><span class="status-pill neutral">待機</span></td></tr>
+                <tr><td><span class="row-title">CTR-2026-00823</span><span class="row-subtitle">queued</span></td><td class="mono">normalized</td><td class="mono">—</td><td class="mono">—</td><td><span class="status-pill neutral">待機</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="card">
+          <div class="card-title-row"><h2>容量</h2><span class="tag">quick factor 1.6</span></div>
+          <div class="capacity-list">
+            <div class="capacity-item"><span class="capacity-label">原データ</span><div class="mini-track"><span style="width: 82%;"></span></div><span class="capacity-value">1.20 GB</span></div>
+            <div class="capacity-item"><span class="capacity-label">抽出テキスト</span><div class="mini-track"><span style="width: 58%;"></span></div><span class="capacity-value">182 MB</span></div>
+            <div class="capacity-item"><span class="capacity-label">Dense vectors</span><div class="mini-track"><span style="width: 68%;"></span></div><span class="capacity-value">132 MB</span></div>
+            <div class="capacity-item"><span class="capacity-label">Sparse + payload</span><div class="mini-track"><span style="width: 45%;"></span></div><span class="capacity-value">61 MB</span></div>
+            <div class="capacity-item"><span class="capacity-label">総計（見積）</span><div class="mini-track"><span style="width: 74%;"></span></div><span class="capacity-value">890 MB</span></div>
+            <div class="capacity-item"><span class="capacity-label">総計（実測）</span><div class="mini-track"><span style="width: 0%;"></span></div><span class="capacity-value">完了後</span></div>
+          </div>
+          <div class="callout" style="margin-top: 16px;">推定chunk: <span class="mono">45,200</span> · 現在 <span class="mono">30,419</span></div>
+        </aside>
+      </div>
+
+      <section class="card" style="margin-top: 16px;" data-tabs>
+        <div class="card-title-row"><h2>エラーと警告</h2><span class="status-pill warning">3 ITEMS</span></div>
+        <div class="tabs">
+          <button class="tab active" type="button" data-tab-target="errors-panel">エラー 2</button>
+          <button class="tab" type="button" data-tab-target="warnings-panel">警告 1</button>
+          <button class="tab" type="button" data-tab-target="events-panel">イベント</button>
+        </div>
+        <div class="tab-panel active" id="errors-panel">
+          <div class="error-row">
+            <span class="file-icon" style="background: var(--red-soft); color: var(--red);">!</span>
+            <div class="file-main"><strong>CTR-2026-00402 · ERR_MYSQL_ROW_DECODE</strong><span>不正な文字列を検出しました。checkpoint: extracted · retryable</span></div>
+            <button class="button small warning" type="button" data-toast="itemを再試行します" data-toast-detail="CTR-2026-00402をextracted checkpointから再開します。">再試行</button>
+          </div>
+          <div class="error-row">
+            <span class="file-icon" style="background: var(--red-soft); color: var(--red);">!</span>
+            <div class="file-main"><strong>CTR-2026-00688 · ERR_EMBED_EMPTY</strong><span>長文列が空です。checkpoint: chunked · permanent</span></div>
+            <button class="button small secondary" type="button" data-toast="詳細を表示" data-toast-detail="空テキストのため自動retry対象外です。">詳細</button>
+          </div>
+        </div>
+        <div class="tab-panel" id="warnings-panel"><div class="callout warning">1レコードでupdated_atがNULLです。row_hash比較で処理しました。</div></div>
+        <div class="tab-panel" id="events-panel"><div class="callout">直近のcheckpoint、lease更新、batch二分イベントを時系列表示します。</div></div>
+      </section>
+
+      <div class="button-row" style="justify-content: flex-end; margin-top: 18px;">
+        <a class="button secondary" href="mockup_job_list.html">ジョブ一覧へ</a>
+        <button class="button warning" type="button" data-toast="失敗itemを一括再試行" data-toast-detail="retryableな1件だけを再試行します。">Retryable 1件を再試行</button>
+      </div>
+      <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 4 / 5</div>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="mockup_cyber.js"></script>
+</body>
+</html>

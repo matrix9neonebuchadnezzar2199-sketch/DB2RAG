@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB2RAG モック — RAG一覧</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mockup_cyber.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="mockup.html">
+      <span class="brand-mark">R</span>
+      <span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span>
+    </a>
+    <span class="environment-pill"><span class="live-dot"></span>LOCAL / QDRANT 1.19</span>
+    <span class="topbar-spacer"></span>
+    <div class="topbar-controls">
+      <div class="control-group">
+        <span class="control-label" id="font-size-label">14px</span>
+        <button class="icon-button" id="font-minus" type="button" aria-label="文字を小さく">−</button>
+        <button class="icon-button" id="font-plus" type="button" aria-label="文字を大きく">＋</button>
+      </div>
+      <div class="control-group">
+        <button class="icon-button" id="theme-toggle" type="button" aria-label="ライトモードに切り替える">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <button class="sidebar-balloon" id="sidebar-balloon" type="button">💬 メニュー</button>
+  <div class="shell">
+    <nav class="sidebar" id="sidebar" aria-label="メインナビゲーション">
+      <div class="sidebar-section">Knowledge</div>
+      <a class="nav-link active" href="mockup.html"><span class="nav-icon">◈</span>RAG一覧</a>
+      <a class="nav-link" href="mockup_rag_create.html"><span class="nav-icon">＋</span>新規・追加</a>
+      <div class="sidebar-section">Operations</div>
+      <a class="nav-link" href="mockup_job_list.html"><span class="nav-icon">⌁</span>変換ジョブ</a>
+      <a class="nav-link" href="mockup_search_preview.html"><span class="nav-icon">⌕</span>検索プレビュー</a>
+      <div class="sidebar-meta">
+        <strong>Embedding Profile</strong>
+        <span class="mono">ruri-v3-310m</span><br>
+        768 dim · FP32 · local
+      </div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を調整">
+      <button class="collapse-button" id="collapse-sidebar" type="button" aria-label="サイドバーを折りたたむ">▼</button>
+    </div>
+
+    <main class="content">
+      <div class="mock-banner"><strong>APPROVED MOCK</strong> 2026-09-10 確定。サンプルデータで承認済み画面構成を示します。</div>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow">Knowledge Collections</div>
+          <h1>RAG一覧</h1>
+          <p>ローカルに永続化した知識ベースの状態、規模、最終変換を一画面で把握します。</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button secondary" type="button" data-toast="一覧を更新しました" data-toast-detail="3件のRAGを確認しました。">↻ 更新</button>
+          <a class="button success" href="mockup_rag_create.html">＋ 新規RAG</a>
+        </div>
+      </section>
+
+      <section class="grid metrics" aria-label="サマリー">
+        <article class="metric">
+          <div class="metric-label">ACTIVE RAG</div>
+          <div class="metric-value">03</div>
+          <div class="metric-foot">すべて検索可能</div>
+        </article>
+        <article class="metric">
+          <div class="metric-label">CHILD CHUNKS</div>
+          <div class="metric-value">27.9K</div>
+          <div class="metric-foot">Parent-Child v1</div>
+        </article>
+        <article class="metric">
+          <div class="metric-label">LOCAL STORAGE</div>
+          <div class="metric-value">2.84 GB</div>
+          <div class="metric-foot">空き 1.2 TB</div>
+        </article>
+        <article class="metric">
+          <div class="metric-label">RUNNING JOBS</div>
+          <div class="metric-value">01</div>
+          <div class="metric-foot">67.3% · ETA 6分</div>
+        </article>
+      </section>
+
+      <div class="grid two">
+        <section class="card">
+          <div class="card-title-row">
+            <h2>知識ベース</h2>
+            <span class="tag">collection per rag_id</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>状態</th>
+                  <th>ソース</th>
+                  <th>Chunks</th>
+                  <th>更新</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="row-title">人事規程KB</span><span class="row-subtitle mono">rag_01J8HR</span></td>
+                  <td><span class="status-pill success">● ACTIVE</span></td>
+                  <td>18 files / 2 tables</td>
+                  <td class="mono">12,418</td>
+                  <td><span class="row-title">2分前</span><span class="row-subtitle">job_6FX0</span></td>
+                  <td><div class="inline-actions"><a class="button small secondary" href="mockup_search_preview.html">検索</a><button class="button small secondary" type="button" data-toast="エクスポートを準備します" data-toast-detail="JSONL + Qdrant snapshot の確認画面へ進みます。">出力</button></div></td>
+                </tr>
+                <tr>
+                  <td><span class="row-title">契約マスタKB</span><span class="row-subtitle mono">rag_01J7CT</span></td>
+                  <td><span class="status-pill running">◔ UPDATING</span></td>
+                  <td>3 tables</td>
+                  <td class="mono">8,120</td>
+                  <td><span class="row-title">実行中</span><span class="row-subtitle">67.3%</span></td>
+                  <td><div class="inline-actions"><a class="button small secondary" href="mockup_job_list.html">ジョブ</a><button class="button small danger" type="button" data-toast="停止確認" data-toast-detail="取消前に確認ダイアログを表示します。">停止</button></div></td>
+                </tr>
+                <tr>
+                  <td><span class="row-title">製品FAQ</span><span class="row-subtitle mono">rag_01J6QA</span></td>
+                  <td><span class="status-pill success">● ACTIVE</span></td>
+                  <td>42 files</td>
+                  <td class="mono">7,382</td>
+                  <td><span class="row-title">昨日 18:04</span><span class="row-subtitle">検証済み</span></td>
+                  <td><div class="inline-actions"><a class="button small secondary" href="mockup_search_preview.html">検索</a><button class="button small warning" type="button" data-toast="削除確認" data-toast-detail="Secure purge の対象と影響を確認します。">削除</button></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="card">
+          <div class="card-title-row">
+            <h2>システム状態</h2>
+            <span class="status-pill success">正常</span>
+          </div>
+          <div class="diagnostic">
+            <span class="diagnostic-icon">✓</span>
+            <div><strong>Qdrant 1.19.0</strong><span>3 aliases · 4 physical collections</span></div>
+          </div>
+          <div class="diagnostic">
+            <span class="diagnostic-icon">✓</span>
+            <div><strong>Ruri GPU Worker</strong><span>RTX A6000 · VRAM 7.8 / 48 GB</span></div>
+          </div>
+          <div class="diagnostic">
+            <span class="diagnostic-icon">✓</span>
+            <div><strong>SQLite WAL</strong><span>checkpoint: 14:31:58 JST</span></div>
+          </div>
+          <div class="callout" style="margin-top: 14px;">
+            外部Embedding APIへの通信はありません。全処理はこのホスト内で完結しています。
+          </div>
+        </aside>
+      </div>
+
+      <section class="card" style="margin-top: 16px;">
+        <div class="card-title-row">
+          <h2>直近のアクティビティ</h2>
+          <a class="button small secondary" href="mockup_job_list.html">ジョブ一覧へ</a>
+        </div>
+        <div class="event-row">
+          <span class="event-icon">✓</span>
+          <div class="event-main"><strong>人事規程KBの世代を切り替えました</strong><span>alias db2rag_rag_01J8HR → v12 · verify 5/5</span></div>
+          <span class="mono muted">14:29</span>
+        </div>
+        <div class="event-row">
+          <span class="event-icon">◔</span>
+          <div class="event-main"><strong>契約マスタKBを変換中</strong><span>embedding batch 188/280 · 82 chunk/s</span></div>
+          <span class="mono muted">14:28</span>
+        </div>
+      </section>
+
+      <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 1 / 5</div>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="mockup_cyber.js"></script>
+</body>
+</html>

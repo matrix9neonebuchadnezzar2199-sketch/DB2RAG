@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB2RAG — 変換ジョブ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mockup_cyber.css?v=20260911-5">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">R</span><span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span></a>
+    <span class="environment-pill"><span class="live-dot"></span>WORKER / IDLE</span>
+    <span class="topbar-spacer"></span>
+    <div class="topbar-controls">
+      <div class="control-group"><span class="control-label" id="font-size-label">14px</span><button class="icon-button" id="font-minus" type="button" aria-label="文字を小さく">−</button><button class="icon-button" id="font-plus" type="button" aria-label="文字を大きく">＋</button></div>
+      <div class="control-group"><button class="icon-button" id="theme-toggle" type="button" aria-label="ライトモードに切り替える">🌙</button></div>
+    </div>
+  </header>
+
+  <button class="sidebar-balloon" id="sidebar-balloon" type="button">💬 メニュー</button>
+  <div class="shell">
+    <nav class="sidebar" id="sidebar" aria-label="メインナビゲーション">
+      <div class="sidebar-section">Knowledge</div>
+      <a class="nav-link" href="/"><span class="nav-icon">◈</span>RAG一覧</a>
+      <a class="nav-link" href="/wizard"><span class="nav-icon">＋</span>新規・追加</a>
+      <div class="sidebar-section">Operations</div>
+      <a class="nav-link active" href="/jobs"><span class="nav-icon">⌁</span>変換ジョブ</a>
+      <a class="nav-link" href="/search"><span class="nav-icon">⌕</span>検索プレビュー</a>
+      <div class="sidebar-meta"><strong>Job Lease</strong>TTL 30s · heartbeat 10s · single GPU worker</div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を調整"><button class="collapse-button" id="collapse-sidebar" type="button" aria-label="サイドバーを折りたたむ">▼</button></div>
+
+    <main class="content">
+      <div class="mock-banner"><strong>APPROVED MOCK</strong> 2026-09-10 確定。固定データで取消・再開・retryの導線を示します。</div>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow">Conversion Jobs</div>
+          <h1>変換ジョブ</h1>
+          <p>失敗・取消したジョブは再開できます。完了済み item は飛ばし、失敗 item から続きます。</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button secondary" type="button" id="jobs-refresh">↻ 更新</button>
+          <a class="button success" href="/wizard">＋ 新規変換</a>
+        </div>
+      </section>
+
+      <section class="grid metrics">
+        <article class="metric"><div class="metric-label">RUNNING</div><div class="metric-value">00</div><div class="metric-foot">実行中なし</div></article>
+        <article class="metric"><div class="metric-label">QUEUED</div><div class="metric-value">00</div><div class="metric-foot">キュー空</div></article>
+        <article class="metric"><div class="metric-label">COMPLETED</div><div class="metric-value">00</div><div class="metric-foot">完了ジョブ総数</div></article>
+        <article class="metric"><div class="metric-label">DEVICE</div><div class="metric-value">—</div><div class="metric-foot">embedder</div></article>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>ジョブ履歴</h2>
+          <div class="filter-bar" id="job-filters" style="margin: 0;">
+            <button class="filter-chip is-active" type="button" data-job-status="all">状態: すべて</button>
+            <button class="filter-chip" type="button" data-job-status="running">実行中</button>
+            <button class="filter-chip" type="button" data-job-status="failed">失敗</button>
+            <button class="filter-chip" type="button" data-job-status="completed">完了</button>
+            <button class="filter-chip" type="button" id="job-window-24h">過去24時間</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>実行作業</th><th>状態</th><th>進捗</th><th>開始 / 終了 / 経過</th><th>Items</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6">ジョブを読み込み中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="grid equal-two" style="margin-top: 16px;">
+        <section class="card">
+          <div class="card-title-row"><h2>実行キュー</h2><span class="status-pill" id="job-queue-pill">IDLE</span></div>
+          <div id="job-queue-body"><div class="callout">ジョブを読み込み中…</div></div>
+        </section>
+        <section class="card">
+          <div class="card-title-row"><h2>Worker状態</h2><span class="status-pill" id="worker-pill">…</span></div>
+          <div id="worker-body"><div class="callout">health を読み込み中…</div></div>
+        </section>
+      </div>
+
+      <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 3 / 5</div>
+    </main>
+  </div>
+  <div class="job-hover" id="job-detail-overlay" hidden>
+    <div class="job-hover-card" role="dialog" aria-modal="true" aria-labelledby="job-hover-title">
+      <div class="job-hover-head">
+        <div>
+          <div class="eyebrow mono" id="job-hover-id">—</div>
+          <h2 id="job-hover-title">進捗・エラー</h2>
+        </div>
+        <button class="icon-button" id="job-hover-close" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="job-hover-body">
+        <div class="callout">詳細をクリックすると実ジョブの進捗を表示します。</div>
+      </div>
+    </div>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="mockup_cyber.js?v=20260911-5"></script>
+  <script src="live.js?v=20260911-5"></script>
+</body>
+</html>

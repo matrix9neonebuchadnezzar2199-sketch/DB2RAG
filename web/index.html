@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB2RAG — RAG一覧</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mockup_cyber.css?v=20260911-5">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">R</span>
+      <span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span>
+    </a>
+    <span class="environment-pill"><span class="live-dot"></span>LOCAL / QDRANT 1.19</span>
+    <span class="topbar-spacer"></span>
+    <div class="topbar-controls">
+      <div class="control-group">
+        <span class="control-label" id="font-size-label">14px</span>
+        <button class="icon-button" id="font-minus" type="button" aria-label="文字を小さく">−</button>
+        <button class="icon-button" id="font-plus" type="button" aria-label="文字を大きく">＋</button>
+      </div>
+      <div class="control-group">
+        <button class="icon-button" id="theme-toggle" type="button" aria-label="ライトモードに切り替える">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <button class="sidebar-balloon" id="sidebar-balloon" type="button">💬 メニュー</button>
+  <div class="shell">
+    <nav class="sidebar" id="sidebar" aria-label="メインナビゲーション">
+      <div class="sidebar-section">Knowledge</div>
+      <a class="nav-link active" href="/"><span class="nav-icon">◈</span>RAG一覧</a>
+      <a class="nav-link" href="/wizard"><span class="nav-icon">＋</span>新規・追加</a>
+      <div class="sidebar-section">Operations</div>
+      <a class="nav-link" href="/jobs"><span class="nav-icon">⌁</span>変換ジョブ</a>
+      <a class="nav-link" href="/search"><span class="nav-icon">⌕</span>検索プレビュー</a>
+      <div class="sidebar-meta">
+        <strong>Embedding Profile</strong>
+        <span class="mono">ruri-v3-310m</span><br>
+        768 dim · FP32 · local
+      </div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を調整">
+      <button class="collapse-button" id="collapse-sidebar" type="button" aria-label="サイドバーを折りたたむ">▼</button>
+    </div>
+
+    <main class="content">
+      <div class="mock-banner"><strong>APPROVED MOCK</strong> 2026-09-10 確定。サンプルデータで承認済み画面構成を示します。</div>
+
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow">Knowledge Collections</div>
+          <h1>RAG一覧</h1>
+          <p>ローカルに永続化した知識ベースの状態、規模、最終変換を一画面で把握します。</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button secondary" type="button" id="rags-refresh">↻ 更新</button>
+          <a class="button success" href="/wizard">＋ 新規RAG</a>
+        </div>
+      </section>
+
+      <section class="card status-board" id="system-status" aria-label="システム状態">
+        <div class="card-title-row">
+          <h2>システム状態</h2>
+          <span class="status-pill success">確認中</span>
+        </div>
+        <div class="status-board-grid">
+          <article class="metric">
+            <div class="metric-label">ACTIVE RAG</div>
+            <div class="metric-value" id="metric-active">—</div>
+            <div class="metric-foot" id="metric-active-foot">検索可能な知識ベース</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">CHILD CHUNKS</div>
+            <div class="metric-value" id="metric-chunks">—</div>
+            <div class="metric-foot">Parent-Child v1</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">LOCAL STORAGE</div>
+            <div class="metric-value" id="metric-storage">—</div>
+            <div class="metric-foot" id="metric-storage-foot">容量APIなし</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">RUNNING JOBS</div>
+            <div class="metric-value" id="metric-jobs">—</div>
+            <div class="metric-foot" id="metric-jobs-foot">実行中なし</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">QDRANT</div>
+            <div class="metric-value" id="sys-qdrant">—</div>
+            <div class="metric-foot" id="sys-qdrant-foot">読み込み中…</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">EMBEDDER</div>
+            <div class="metric-value" id="sys-gpu">—</div>
+            <div class="metric-foot" id="sys-gpu-foot">読み込み中…</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">SQLITE</div>
+            <div class="metric-value" id="sys-sqlite">—</div>
+            <div class="metric-foot" id="sys-sqlite-foot">読み込み中…</div>
+          </article>
+        </div>
+        <div class="callout" style="margin-top: 12px;">
+          外部Embedding APIへの通信はありません。全処理はこのホスト内で完結しています。
+        </div>
+      </section>
+
+      <section class="card kb-card">
+        <div class="card-title-row">
+          <h2>知識ベース</h2>
+          <span class="tag">collection per rag_id</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>状態</th>
+                <th>ソース</th>
+                <th>Chunks</th>
+                <th>更新</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6">読み込み中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <div class="card-title-row">
+          <h2>直近のアクティビティ</h2>
+          <a class="button small secondary" href="/jobs">ジョブ一覧へ</a>
+        </div>
+        <div id="activity-list">
+          <div class="callout">読み込み中…</div>
+        </div>
+      </section>
+
+      <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 1 / 5</div>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="mockup_cyber.js?v=20260911-5"></script>
+  <script src="live.js?v=20260911-5"></script>
+</body>
+</html>
