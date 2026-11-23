@@ -6,6 +6,7 @@ import hashlib
 import html
 import re
 import unicodedata
+from pathlib import Path
 
 
 def normalize_text(text: str) -> str:
@@ -27,9 +28,9 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def sha256_file(path: str | bytes) -> str:
+def sha256_file(path: str) -> str:
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
+    with Path(path).open("rb") as handle:
         while True:
             chunk = handle.read(1024 * 1024)
             if not chunk:

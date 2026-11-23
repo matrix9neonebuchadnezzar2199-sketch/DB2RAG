@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     hf_offline: bool = False
     worker_id: str = "worker-local-1"
     allow_bind_all: bool = False
+    # 既定オフ。有効化するまで Cross-Encoder をロードしない。
+    reranker_enabled: bool = False
+    reranker_model: str = "cl-nagoya/ruri-v3-reranker-310m"
+    reranker_top_n: int = 30
+    # 空なら loopback の画面は鍵なし。非 loopback では起動しない。
+    api_key: str | None = None
+    dify_content_mode: str = "parent"
+    dify_default_acl: str = "internal"
+    require_acl_in_lan: bool = True
 
     def sqlite_path(self) -> Path:
         return self.data_dir / "db2rag.db"

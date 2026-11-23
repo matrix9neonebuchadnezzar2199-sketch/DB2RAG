@@ -8,12 +8,20 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="mockup_cyber.css?v=20260911-6">
+  <style>
+    #dify-dialog { width: min(560px, calc(100vw - 32px)); padding: 20px 22px 16px; border: 1px solid var(--border-strong); background: var(--bg, #10141c); color: inherit; }
+    #dify-dialog h2 { margin: 0 0 8px; }
+    #dify-dialog .field { margin-top: 12px; }
+    #dify-dialog .input-with-action { display: flex; gap: 8px; align-items: center; }
+    #dify-dialog input { flex: 1; min-width: 0; }
+    #dify-dialog .wizard-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+  </style>
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="/">
       <span class="brand-mark">R</span>
-      <span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span>
+      <span class="brand-copy"><strong>DB2RAG</strong><small data-app-version>v…</small></span>
     </a>
     <span class="environment-pill"><span class="live-dot"></span>LOCAL / QDRANT 1.19</span>
     <span class="topbar-spacer"></span>
@@ -147,6 +155,17 @@
       <div class="footer-note">DB2RAG Cyber Theme Mock · Screen 1 / 5</div>
     </main>
   </div>
+  <dialog id="dify-dialog">
+    <form method="dialog">
+      <h2>Dify連携</h2>
+      <p class="field-tip">Dify の外部知識 API に、この Endpoint と knowledge_id を登録します。Dify 本体の設定画面で行います。</p>
+      <div class="field"><label for="dify-endpoint-docker">Endpoint（Docker）</label><div class="input-with-action"><input id="dify-endpoint-docker" class="mono" readonly><button class="button secondary" type="button" id="dify-copy-docker" data-copy="">コピー</button></div></div>
+      <div class="field"><label for="dify-endpoint-local">Endpoint（このPC）</label><div class="input-with-action"><input id="dify-endpoint-local" class="mono" readonly><button class="button secondary" type="button" id="dify-copy-local" data-copy="">コピー</button></div></div>
+      <div class="field"><label for="dify-knowledge-id">knowledge_id</label><div class="input-with-action"><input id="dify-knowledge-id" class="mono" readonly><button class="button secondary" type="button" id="dify-copy-id" data-copy="">コピー</button></div></div>
+      <p class="field-tip" id="dify-auth-note"></p>
+      <div class="wizard-actions"><button class="button secondary" value="cancel">閉じる</button></div>
+    </form>
+  </dialog>
   <div class="toast-region" id="toast-region" aria-live="polite"></div>
   <script src="mockup_cyber.js?v=20260911-6"></script>
   <script src="live.js?v=20260911-6"></script>

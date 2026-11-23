@@ -9,7 +9,7 @@ from db2rag.ids import new_id, point_id_for_child
 from db2rag.parsers.canonical import Block, CanonicalDocument
 from db2rag.parsers.csvxlsx import parse_csv
 from db2rag.parsers.txtmd import parse_md, parse_txt
-from db2rag.sparse import tokenize, to_sparse
+from db2rag.sparse import to_sparse, tokenize
 from db2rag.textnorm import highlight_html, normalize_text
 
 

@@ -123,6 +123,14 @@ def _upload_paths_for_rag(conn: sqlite3.Connection, rag_id: str, uploads_dir: Pa
 
 
 def _delete_rag_rows(conn: sqlite3.Connection, rag_id: str) -> None:
+    for row in conn.execute("SELECT config_json FROM sources WHERE rag_id=?", (rag_id,)).fetchall():
+        try:
+            config = json.loads(row["config_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        secret_id = config.get("secret_id")
+        if secret_id:
+            conn.execute("DELETE FROM secrets WHERE secret_id=?", (secret_id,))
     conn.execute(
         """
         DELETE FROM child_chunks WHERE parent_chunk_id IN (

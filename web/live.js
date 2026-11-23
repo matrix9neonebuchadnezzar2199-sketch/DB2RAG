@@ -57,6 +57,30 @@
     return "";
   }
 
+  async function showVersion() {
+    const nodes = document.querySelectorAll("[data-app-version]");
+    if (!nodes.length) return;
+    try {
+      const data = await apiJson("GET", "/api/v1/version");
+      nodes.forEach((node) => { node.textContent = `v${data.version}`; });
+      window.DB2RAGVersion = data;
+      if (data.reranker_enabled) {
+        const rerankerSwitch = document.getElementById("reranker-switch");
+        rerankerSwitch?.classList.remove("is-disabled");
+        rerankerSwitch?.removeAttribute("aria-disabled");
+        const note = "設定が有効です。ONで再順位付けします。";
+        const noteNode = document.getElementById("reranker-note");
+        const diag = document.getElementById("reranker-diag");
+        if (noteNode) noteNode.textContent = note;
+        if (diag) diag.textContent = note;
+      }
+    } catch (error) {
+      nodes.forEach((node) => { node.textContent = "v—"; });
+    }
+  }
+
+  showVersion();
+
   document.querySelectorAll("a.nav-link").forEach((link) => {
     const href = link.getAttribute("href") || "";
     const text = link.textContent || "";
@@ -103,12 +127,40 @@
           <td>${escapeHtml(rag.updated_at || "")}</td>
           <td><div class="inline-actions">
             <a class="button small secondary" href="/search?rag=${encodeURIComponent(rag.rag_id)}">検索</a>
+            <button class="button small secondary" type="button" data-rag-dify="${escapeHtml(rag.rag_id)}">Dify連携</button>
             <button class="button small secondary" type="button" data-rag-export="${escapeHtml(rag.rag_id)}">出力</button>
             ${running ? `<button class="button small danger" type="button" data-rag-stop="${escapeHtml(rag.rag_id)}">停止</button>` : ""}
             <button class="button small warning" type="button" data-rag-delete="${escapeHtml(rag.rag_id)}" data-rag-name="${escapeHtml(rag.display_name || rag.rag_id)}" data-rag-running="${running ? "1" : "0"}">削除</button>
           </div></td>
         </tr>`;
       }).join("") : `<tr><td colspan="6">RAGはまだありません。新規作成から投入してください。</td></tr>`;
+      tbody.querySelectorAll("[data-rag-dify]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const dialog = document.getElementById("dify-dialog");
+          if (!dialog || typeof dialog.showModal !== "function") return;
+          try {
+            const config = await apiJson("GET", `/api/v1/rags/${encodeURIComponent(button.dataset.ragDify)}/dify-config`);
+            const fill = (inputId, copyId, value) => {
+              const input = document.getElementById(inputId);
+              const copy = document.getElementById(copyId);
+              if (input) input.value = value || "";
+              if (copy) copy.dataset.copy = value || "";
+            };
+            fill("dify-endpoint-docker", "dify-copy-docker", config.endpoint_docker);
+            fill("dify-endpoint-local", "dify-copy-local", config.endpoint_local);
+            fill("dify-knowledge-id", "dify-copy-id", config.knowledge_id);
+            const note = document.getElementById("dify-auth-note");
+            if (note) {
+              note.textContent = config.auth_required
+                ? `API キーが必要です。既定 ACL は ${config.default_acl} です。`
+                : `このPCからの疎通に API キーは不要です。既定 ACL は ${config.default_acl} です。`;
+            }
+            dialog.showModal();
+          } catch (error) {
+            toast("Dify連携情報を取得できません", String(error));
+          }
+        });
+      });
       tbody.querySelectorAll("[data-rag-export]").forEach((button) => {
         button.addEventListener("click", async () => {
           if (button.disabled) return;
@@ -651,8 +703,22 @@
     const sourceFilter = document.getElementById("source-type");
     const hybridSwitch = document.getElementById("hybrid-switch");
     const parentSwitch = document.getElementById("parent-switch");
+    const dedupSwitch = document.getElementById("dedup-switch");
+    const rerankerSwitch = document.getElementById("reranker-switch");
     bindToggleSwitch(hybridSwitch);
     bindToggleSwitch(parentSwitch);
+    bindToggleSwitch(dedupSwitch);
+    bindToggleSwitch(rerankerSwitch);
+    const version = window.DB2RAGVersion;
+    if (version?.reranker_enabled && rerankerSwitch) {
+      rerankerSwitch.classList.remove("is-disabled");
+      rerankerSwitch.removeAttribute("aria-disabled");
+      const note = "設定が有効です。ONで再順位付けします。";
+      const noteNode = document.getElementById("reranker-note");
+      const diag = document.getElementById("reranker-diag");
+      if (noteNode) noteNode.textContent = note;
+      if (diag) diag.textContent = note;
+    }
     markUnimplemented(document.getElementById("eval-save"), "評価セット保存は未実装です");
     markUnimplemented(document.getElementById("mime-filter"), "形式フィルタは未実装です");
     markUnimplemented(document.getElementById("section-filter"), "見出しフィルタは未実装です");
@@ -684,6 +750,7 @@
       syncAclFromRag();
       if (hybridSwitch) hybridSwitch.classList.add("on");
       if (parentSwitch) parentSwitch.classList.add("on");
+      if (dedupSwitch) dedupSwitch.classList.add("on");
       toast("フィルターをリセット", "ソース・ACL・Hybrid・Parent を初期化しました");
     });
 
@@ -715,6 +782,8 @@
         filters,
         expand_parent: switchOn(parentSwitch),
         hybrid: switchOn(hybridSwitch),
+        dedup_parent: switchOn(dedupSwitch),
+        use_reranker: rerankerSwitch && !rerankerSwitch.classList.contains("is-disabled") ? switchOn(rerankerSwitch) : false,
       };
       try {
         const result = await apiJson("POST", "/api/v1/search", payload);
@@ -1121,6 +1190,35 @@
       ocrSwitch.setAttribute("aria-disabled", "true");
     }
 
+    function mysqlAdvanced(tables) {
+      const extra = {};
+      const sqlRaw = document.getElementById("mysql-custom-sql")?.value?.trim();
+      const templateRaw = document.getElementById("mysql-template-json")?.value?.trim();
+      const updatedAt = document.getElementById("mysql-updated-at")?.value?.trim();
+      if (sqlRaw) {
+        const parsed = JSON.parse(sqlRaw);
+        if (!Array.isArray(parsed)) throw new Error("カスタムSQLは配列で書いてください");
+        extra.custom_sql = parsed.map((item) => ({
+          object_key: item.object_key || item.sql_id,
+          sql: item.sql,
+          pk_columns: item.pk_columns || [],
+        }));
+      }
+      const templates = templateRaw ? JSON.parse(templateRaw) : {};
+      if (templateRaw && (!templates || typeof templates !== "object" || Array.isArray(templates))) {
+        throw new Error("テンプレートJSONはオブジェクトで書いてください");
+      }
+      if (updatedAt) {
+        tables.forEach((key) => {
+          const current = templates[key] && typeof templates[key] === "object" ? { ...templates[key] } : {};
+          if (!current.updated_at_column) current.updated_at_column = updatedAt;
+          templates[key] = current;
+        });
+      }
+      if (Object.keys(templates).length) extra.mysql_templates = templates;
+      return extra;
+    }
+
     const submit = document.getElementById("wizard-submit");
     if (submit) {
       submit.addEventListener("click", async (event) => {
@@ -1152,6 +1250,12 @@
             .filter(Boolean);
           if (!payload.tables.length) {
             toast("テーブルが未選択", "取り込み対象を1つ以上選んでください");
+            return;
+          }
+          try {
+            Object.assign(payload, mysqlAdvanced(payload.tables));
+          } catch (error) {
+            toast("詳細設定を読めません", String(error));
             return;
           }
         } else {

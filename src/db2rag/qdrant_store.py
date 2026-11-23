@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
+from uuid import UUID
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qm
@@ -32,8 +33,11 @@ class QdrantStore:
         self.path = path
 
     def version(self) -> str:
+        """Qdrant の版。ローカルモードで HTTP が無いときは空文字に落とす。"""
         try:
-            telemetry = self.client.http.telemetry_api.telemetry()
+            # 生成クライアントの型に telemetry が無い版がある。ローカルはここで落ちる。
+            http = cast(Any, self.client.http)
+            telemetry = http.telemetry_api.telemetry()
             return str(getattr(telemetry, "version", "") or "")
         except Exception:
             pass
@@ -42,7 +46,11 @@ class QdrantStore:
             version = getattr(info, "version", None) or getattr(info, "title", "")
             return str(version)
         except Exception:
-            root = self.client.http.rest.raw_request("GET", "/")
+            try:
+                http = cast(Any, self.client.http)
+                root = http.rest.raw_request("GET", "/")
+            except Exception:
+                return ""
             if isinstance(root, dict):
                 return str(root.get("version", ""))
             return ""
@@ -57,6 +65,11 @@ class QdrantStore:
         return {"ok": ok, "version": version, "mode": self.mode}
 
     def create_collection(self, name: str) -> None:
+        """dense と IDF 付き sparse のコレクションを作る。既存なら何もしない。
+
+        Args:
+            name: コレクション名。
+        """
         if self.client.collection_exists(name):
             return
         self.client.create_collection(
@@ -69,7 +82,11 @@ class QdrantStore:
                 )
             },
             sparse_vectors_config={
-                "sparse": qm.SparseVectorParams(index=qm.SparseIndexParams(on_disk=False))
+                # IDF はここで掛ける。トークン側で log を掛けると二重になる。
+                "sparse": qm.SparseVectorParams(
+                    index=qm.SparseIndexParams(on_disk=False),
+                    modifier=qm.Modifier.IDF,
+                )
             },
             hnsw_config=qm.HnswConfigDiff(
                 m=HNSW_M,
@@ -78,7 +95,7 @@ class QdrantStore:
             ),
             quantization_config=None,
         )
-        indexes = [
+        indexes: list[tuple[str, qm.PayloadSchemaType | qm.TextIndexParams]] = [
             ("rag_id", qm.PayloadSchemaType.KEYWORD),
             ("acl_tag", qm.PayloadSchemaType.KEYWORD),
             ("source_type", qm.PayloadSchemaType.KEYWORD),
@@ -151,6 +168,18 @@ class QdrantStore:
     def count(self, name: str) -> int:
         return int(self.client.count(name, exact=True).count)
 
+    def delete_points(self, collection: str, point_ids: list[str]) -> None:
+        """指定 point を消す。空リストは何もしない。"""
+        if not collection or not point_ids:
+            return
+        for start in range(0, len(point_ids), UPSERT_BATCH):
+            batch: list[int | str | UUID] = list(point_ids[start : start + UPSERT_BATCH])
+            self.client.delete(
+                collection_name=collection,
+                points_selector=qm.PointIdsList(points=batch),
+                wait=True,
+            )
+
     def upsert_points(
         self,
         collection: str,
@@ -170,49 +199,106 @@ class QdrantStore:
         query_filter: qm.Filter | None,
         hybrid: bool = True,
     ) -> list[dict[str, Any]]:
+        """Dense と sparse を取り、絶対スケールの RRF で融合する。
+
+        取得結果の最大値では割らない。片側だけ 1 位の理論値は 0.5 で、両方 1 位で 1.0。
+
+        Args:
+            collection: コレクション名または alias。
+            dense: クエリの dense ベクトル。
+            query_text: sparse 化するクエリ文字列。
+            limit: 返す最大件数。
+            query_filter: payload フィルタ。
+            hybrid: False のときは dense のみ。
+
+        Returns:
+            hybrid 時は ``score`` が ``rrf_norm``。``raw_rrf`` ``dense_score``
+            ``sparse_score`` ``sparse_rank`` ``payload`` を含む。
+
+        Raises:
+            RuntimeError: batch 応答の本数がリクエストと違うとき。
+        """
+        if limit < 1:
+            return []
         search_params = qm.SearchParams(hnsw_ef=HNSW_EF)
+        dense_limit = max(PREFETCH_DENSE, limit)
+        sparse_vector = to_sparse(query_text) if hybrid else None
+        sparse_limit = max(PREFETCH_SPARSE, limit)
+        dense_hits, sparse_hits = self._query_dense_and_sparse(
+            collection=collection,
+            dense=dense,
+            sparse_vector=sparse_vector,
+            query_filter=query_filter,
+            dense_limit=dense_limit,
+            sparse_limit=sparse_limit,
+            search_params=search_params,
+            hybrid=hybrid,
+        )
+        if not hybrid:
+            return [_hit_to_dict(hit, source="dense") for hit in dense_hits[:limit]]
+        return _fuse_rrf(dense_hits, sparse_hits, k=RRF_K, limit=limit)
+
+    def _query_dense_and_sparse(
+        self,
+        *,
+        collection: str,
+        dense: list[float],
+        sparse_vector: Any,
+        query_filter: qm.Filter | None,
+        dense_limit: int,
+        sparse_limit: int,
+        search_params: qm.SearchParams,
+        hybrid: bool,
+    ) -> tuple[list[Any], list[Any]]:
+        """dense と sparse を 1 RTT で取る。batch が無ければ query を分ける。"""
+        batch_query = getattr(self.client, "query_batch_points", None)
+        if hybrid and callable(batch_query):
+            requests = [
+                qm.QueryRequest(
+                    query=dense,
+                    using="dense",
+                    filter=query_filter,
+                    limit=dense_limit,
+                    params=search_params,
+                    with_payload=True,
+                    with_vector=False,
+                ),
+                qm.QueryRequest(
+                    query=sparse_vector,
+                    using="sparse",
+                    filter=query_filter,
+                    limit=sparse_limit,
+                    with_payload=True,
+                    with_vector=False,
+                ),
+            ]
+            responses: list[Any] = list(
+                batch_query(collection_name=collection, requests=requests)
+            )
+            if len(responses) != len(requests):
+                raise RuntimeError(
+                    f"query_batch_points returned {len(responses)} for {len(requests)} requests"
+                )
+            return list(responses[0].points), list(responses[1].points)
         dense_hits = self._query(
             collection=collection,
             query=dense,
             using="dense",
             query_filter=query_filter,
-            limit=PREFETCH_DENSE,
+            limit=dense_limit,
             search_params=search_params,
         )
-        if not hybrid:
-            return [_hit_to_dict(hit, source="dense") for hit in dense_hits[:limit]]
-        sparse = to_sparse(query_text)
+        if not hybrid or sparse_vector is None:
+            return dense_hits, []
         sparse_hits = self._query(
             collection=collection,
-            query=sparse,
+            query=sparse_vector,
             using="sparse",
             query_filter=query_filter,
-            limit=PREFETCH_SPARSE,
+            limit=sparse_limit,
             search_params=None,
         )
-        fused = _rrf(
-            [[str(h.id) for h in dense_hits], [str(h.id) for h in sparse_hits]],
-            k=RRF_K,
-        )
-        by_id: dict[str, Any] = {}
-        for hit in list(dense_hits) + list(sparse_hits):
-            by_id[str(hit.id)] = hit
-        results: list[dict[str, Any]] = []
-        max_score = max(fused.values()) if fused else 1.0
-        for point_id, raw_score in sorted(fused.items(), key=lambda item: item[1], reverse=True):
-            hit = by_id[point_id]
-            dense_score = next((float(h.score) for h in dense_hits if str(h.id) == point_id), 0.0)
-            results.append(
-                {
-                    "id": point_id,
-                    "score": raw_score / max_score if max_score else 0.0,
-                    "dense_score": dense_score,
-                    "payload": dict(hit.payload or {}),
-                }
-            )
-            if len(results) >= limit:
-                break
-        return results
+        return dense_hits, sparse_hits
 
     def _query(
         self,
@@ -237,13 +323,65 @@ class QdrantStore:
 
 
 def _hit_to_dict(hit: Any, source: str) -> dict[str, Any]:
+    score = float(hit.score)
     return {
         "id": str(hit.id),
-        "score": float(hit.score),
-        "dense_score": float(hit.score),
+        "score": score,
+        "raw_rrf": None,
+        "dense_score": score,
+        "sparse_score": 0.0,
+        "sparse_rank": None,
         "payload": dict(hit.payload or {}),
         "source": source,
     }
+
+
+def _fuse_rrf(
+    dense_hits: list[Any],
+    sparse_hits: list[Any],
+    *,
+    k: int,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """両リストの順位から RRF を作り、理論最大 ``2/(k+1)`` で 0..1 に写す。"""
+    dense_ids = [str(hit.id) for hit in dense_hits]
+    sparse_ids = [str(hit.id) for hit in sparse_hits]
+    raw_scores = _rrf([dense_ids, sparse_ids], k)
+    dense_by_id: dict[str, Any] = {}
+    for hit in dense_hits:
+        dense_by_id.setdefault(str(hit.id), hit)
+    sparse_by_id: dict[str, Any] = {}
+    sparse_rank: dict[str, int] = {}
+    for rank, hit in enumerate(sparse_hits, start=1):
+        point_id = str(hit.id)
+        sparse_by_id.setdefault(point_id, hit)
+        sparse_rank.setdefault(point_id, rank)
+    ordered = sorted(raw_scores.items(), key=lambda item: (-item[1], item[0]))
+    results: list[dict[str, Any]] = []
+    for point_id, raw_rrf in ordered:
+        dense_hit = dense_by_id.get(point_id)
+        sparse_hit = sparse_by_id.get(point_id)
+        payload_hit = dense_hit if dense_hit is not None else sparse_hit
+        payload = dict(getattr(payload_hit, "payload", None) or {})
+        results.append(
+            {
+                "id": point_id,
+                "score": _rrf_norm(raw_rrf, k),
+                "raw_rrf": raw_rrf,
+                "dense_score": float(dense_hit.score) if dense_hit is not None else 0.0,
+                "sparse_score": float(sparse_hit.score) if sparse_hit is not None else 0.0,
+                "sparse_rank": sparse_rank.get(point_id),
+                "payload": payload,
+            }
+        )
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _rrf_norm(raw_rrf: float, k: int) -> float:
+    """``min(1, raw / (2/(k+1)))``。片側 1 位は 0.5。"""
+    return min(1.0, raw_rrf / (2.0 / (k + 1)))
 
 
 def _rrf(rank_lists: list[list[str]], k: int) -> dict[str, float]:

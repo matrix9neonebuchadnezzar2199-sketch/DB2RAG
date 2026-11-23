@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -13,11 +14,9 @@ def load_or_create_key(path: Path) -> Fernet:
         return Fernet(path.read_bytes())
     key = Fernet.generate_key()
     path.write_bytes(key)
-    try:
+    # Windows では POSIX 権限を付けられないことがある
+    with suppress(OSError):
         path.chmod(0o600)
-    except OSError:
-        # Windows では POSIX 権限を付けられないことがある
-        pass
     return Fernet(key)
 
 

@@ -13,7 +13,7 @@
   <header class="topbar">
     <a class="brand" href="/">
       <span class="brand-mark">R</span>
-      <span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span>
+      <span class="brand-copy"><strong>DB2RAG</strong><small data-app-version>v…</small></span>
     </a>
     <span class="environment-pill"><span class="live-dot"></span>LOCAL / INGEST WIZARD</span>
     <span class="topbar-spacer"></span>
@@ -243,6 +243,24 @@
                         <p class="field-tip">ACLは「誰にこの文書を見せてよいか」の印です。ここで付けた印と、検索側の印が重なるものだけがヒットします。</p>
                       </div>
                     </div>
+                    <details id="mysql-advanced" style="margin-top: 14px;">
+                      <summary>詳細設定（任意）</summary>
+                      <div class="field" style="margin-top: 12px;">
+                        <label for="mysql-custom-sql">カスタム SQL</label>
+                        <textarea id="mysql-custom-sql" rows="4" placeholder='[{"sql_id":"hr.staff","sql":"SELECT id, name FROM staff","pk_columns":["id"]}]'></textarea>
+                        <p class="field-tip">READ ONLY の SELECT だけです。sql_id は schema.table と同じキーです。空ならテーブル全列を取り込みます。</p>
+                      </div>
+                      <div class="field" style="margin-top: 12px;">
+                        <label for="mysql-template-json">テンプレート JSON</label>
+                        <textarea id="mysql-template-json" rows="4" placeholder='{"hr.regulations":{"title_column":"title","updated_at_column":"updated_at"}}'></textarea>
+                        <p class="field-tip">キーは schema.table です。空なら既存のひな形のままです。</p>
+                      </div>
+                      <div class="field" style="margin-top: 12px;">
+                        <label for="mysql-updated-at">増分同期 updated_at 列</label>
+                        <input id="mysql-updated-at" placeholder="updated_at">
+                        <p class="field-tip">選んだ表すべてに、この列名を updated_at_column として足します。テンプレート JSON に既にある列は上書きしません。</p>
+                      </div>
+                    </details>
                   </div>
 
                   <div class="branch-panel" data-branch-group="source-type" data-branch-value="file" hidden>

@@ -2,20 +2,36 @@
 
 from __future__ import annotations
 
-import sqlite3
 import threading
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.responses import Response
 
+from db2rag.auth import (
+    bearer_matches,
+    configured_api_key,
+    is_loopback,
+    path_needs_auth,
+    require_api_key_for_bind,
+)
 from db2rag.config import Settings, get_settings, repo_root
-from db2rag.db import connect, migrate, row_to_dict, rows_to_dicts, schema_version, utcnow
+from db2rag.db import DbManager, row_to_dict, rows_to_dicts, schema_version, utcnow
+from db2rag.dify_adapter import (
+    DifyRetrievalRequest,
+    filter_section,
+    metadata_to_filters,
+    to_dify_records,
+)
 from db2rag.embedding import Embedder
+from db2rag.eval import load_dataset, run_evaluation
 from db2rag.export import export_rag
 from db2rag.mysql_reader import connect as mysql_connect
 from db2rag.mysql_reader import list_objects, test_connection
@@ -27,6 +43,7 @@ from db2rag.pipeline import (
 )
 from db2rag.purge import purge_rag
 from db2rag.qdrant_store import QdrantStore
+from db2rag.reranker import Reranker
 from db2rag.search import search as run_search
 from db2rag.worker import run_worker_loop
 
@@ -38,9 +55,10 @@ DOCS_DIR = repo_root() / "docs"
 
 class AppState:
     settings: Settings
-    conn: sqlite3.Connection
+    db: DbManager
     store: QdrantStore
     embedder: Embedder
+    reranker: Reranker
     stop: threading.Event
     worker: threading.Thread | None = None
 
@@ -57,6 +75,9 @@ class JobCreateRequest(BaseModel):
     paths: list[str] = Field(default_factory=list)
     mysql: dict[str, Any] | None = None
     tables: list[str] = Field(default_factory=list)
+    mysql_templates: dict[str, Any] = Field(default_factory=dict)
+    mysql_pk_overrides: dict[str, list[str]] = Field(default_factory=dict)
+    custom_sql: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SearchRequest(BaseModel):
@@ -67,6 +88,15 @@ class SearchRequest(BaseModel):
     filters: dict[str, Any] = Field(default_factory=dict)
     expand_parent: bool = True
     hybrid: bool = True
+    dedup_parent: bool = True
+    use_reranker: bool | None = None
+
+
+class EvalRunRequest(BaseModel):
+    rag_id: str
+    dataset: str | None = None
+    top_k: int = 20
+    score_threshold: float = 0.0
 
 
 class MysqlTestRequest(BaseModel):
@@ -78,12 +108,21 @@ class MysqlTestRequest(BaseModel):
     ssl_mode: str = "DISABLED"
 
 
+def package_version() -> str:
+    """インストール済みパッケージの版。画面と API の正本。"""
+    try:
+        return version("db2rag")
+    except PackageNotFoundError:
+        return "0.2.0"
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    require_api_key_for_bind(settings.host, settings.api_key)
     STATE.settings = settings
-    STATE.conn = connect(settings.sqlite_path())
-    migrate(STATE.conn)
+    STATE.db = DbManager(settings.sqlite_path())
+    STATE.db.connection()
     if settings.qdrant_path:
         STATE.store = QdrantStore(url=settings.qdrant_url, path=settings.qdrant_path)
     else:
@@ -93,10 +132,17 @@ async def lifespan(app: FastAPI):
         models_dir=settings.models_dir(),
         hf_offline=settings.hf_offline,
     )
+    # 既定は無効。score() までモデルを読まない。
+    STATE.reranker = Reranker(
+        enabled=settings.reranker_enabled,
+        model_id=settings.reranker_model,
+        models_dir=settings.models_dir(),
+        top_n=settings.reranker_top_n,
+    )
     STATE.stop = threading.Event()
     STATE.worker = threading.Thread(
         target=run_worker_loop,
-        args=(STATE.conn, STATE.store, STATE.embedder, settings, STATE.stop),
+        args=(STATE.db, STATE.store, STATE.embedder, settings, STATE.stop),
         name="db2rag-worker",
         daemon=True,
     )
@@ -107,11 +153,59 @@ async def lifespan(app: FastAPI):
         STATE.stop.set()
         if STATE.worker:
             STATE.worker.join(timeout=15)
-        STATE.conn.close()
+        STATE.db.close_all()
+
+
+def mysql_job_config(
+    mysql: dict[str, Any],
+    *,
+    templates: dict[str, Any],
+    pk_overrides: dict[str, list[str]],
+    custom_sql: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """接続設定に、表ごとのテンプレート・PK・カスタム SQL を載せる。
+
+    Args:
+        mysql: host などの接続情報。パスワードは後段で暗号化する。
+        templates: キーは ``schema.table``。
+        pk_overrides: ビューなど主キーを持たないオブジェクトの列。
+        custom_sql: ``object_key`` と ``sql`` を持つ READ ONLY 文。
+
+    Returns:
+        ``create_job_from_mysql`` に渡す設定。
+    """
+    stored = dict(mysql)
+    if templates:
+        stored["template"] = templates
+    if pk_overrides:
+        stored["pk_columns"] = pk_overrides
+    if custom_sql:
+        stored["custom_sql"] = custom_sql
+    return stored
+
+
+async def auth_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    settings = getattr(STATE, "settings", None)
+    if settings is not None and path_needs_auth(
+        request.url.path,
+        api_key=settings.api_key,
+        host=settings.host,
+    ):
+        expected = configured_api_key(settings.api_key) or ""
+        if not bearer_matches(request.headers.get("authorization"), expected):
+            return JSONResponse(
+                status_code=403,
+                content={"error_code": 1002, "error_msg": "Authorization failed"},
+            )
+    return await call_next(request)
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="DB2RAG", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="DB2RAG", version=package_version(), lifespan=lifespan)
+    app.middleware("http")(auth_middleware)
     _register_api(app)
     if WEB_DIR.exists():
         app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
@@ -174,7 +268,7 @@ def _register_api(app: FastAPI) -> None:
     def health() -> dict[str, Any]:
         qdrant = STATE.store.health()
         device = STATE.embedder.describe_device()
-        sqlite_ver = schema_version(STATE.conn)
+        sqlite_ver = schema_version(STATE.db.connection())
         gpu_ok = bool(device.get("cuda"))
         status = "ok"
         warnings: list[str] = []
@@ -198,11 +292,11 @@ def _register_api(app: FastAPI) -> None:
 
     @app.get("/api/v1/rags")
     def rags() -> dict[str, Any]:
-        return {"rags": list_rags(STATE.conn)}
+        return {"rags": list_rags(STATE.db.connection())}
 
     @app.get("/api/v1/rags/{rag_id}")
     def rag_detail(rag_id: str) -> dict[str, Any]:
-        row = row_to_dict(STATE.conn.execute("SELECT * FROM rags WHERE rag_id=?", (rag_id,)).fetchone())
+        row = row_to_dict(STATE.db.connection().execute("SELECT * FROM rags WHERE rag_id=?", (rag_id,)).fetchone())
         if not row:
             raise HTTPException(404, "rag not found")
         return row
@@ -211,7 +305,7 @@ def _register_api(app: FastAPI) -> None:
     def rag_delete(rag_id: str) -> dict[str, Any]:
         try:
             return purge_rag(
-                STATE.conn,
+                STATE.db.connection(),
                 STATE.store,
                 rag_id,
                 uploads_dir=STATE.settings.uploads_dir(),
@@ -225,7 +319,7 @@ def _register_api(app: FastAPI) -> None:
         rag = None
         if body.rag_id:
             rag = row_to_dict(
-                STATE.conn.execute("SELECT * FROM rags WHERE rag_id=?", (body.rag_id,)).fetchone()
+                STATE.db.connection().execute("SELECT * FROM rags WHERE rag_id=?", (body.rag_id,)).fetchone()
             )
             if rag is None:
                 raise HTTPException(404, "rag not found")
@@ -236,13 +330,19 @@ def _register_api(app: FastAPI) -> None:
                 raise HTTPException(400, "tables required: select at least one MySQL object")
             try:
                 return create_job_from_mysql(
-                    STATE.conn,
+                    STATE.db.connection(),
                     rag=rag,
                     display_name=body.display_name,
                     acl_tag=_acl(body.acl_tag),
-                    mysql_config=body.mysql,
+                    mysql_config=mysql_job_config(
+                        body.mysql,
+                        templates=body.mysql_templates,
+                        pk_overrides=body.mysql_pk_overrides,
+                        custom_sql=body.custom_sql,
+                    ),
                     tables=body.tables,
                     mode=body.mode,
+                    secrets_key_path=STATE.settings.secrets_key_path(),
                 )
             except Exception as exc:
                 raise HTTPException(400, str(exc)) from exc
@@ -250,7 +350,7 @@ def _register_api(app: FastAPI) -> None:
         if not paths:
             raise HTTPException(400, "paths required")
         return create_job_from_files(
-            STATE.conn,
+            STATE.db.connection(),
             rag=rag,
             display_name=body.display_name,
             acl_tag=_acl(body.acl_tag),
@@ -261,7 +361,7 @@ def _register_api(app: FastAPI) -> None:
     @app.get("/api/v1/jobs")
     def jobs() -> dict[str, Any]:
         rows = rows_to_dicts(
-            STATE.conn.execute(
+            STATE.db.connection().execute(
                 """
                 SELECT jobs.*, rags.display_name
                 FROM jobs
@@ -276,7 +376,7 @@ def _register_api(app: FastAPI) -> None:
     @app.get("/api/v1/jobs/{job_id}")
     def job_detail(job_id: str) -> dict[str, Any]:
         job = row_to_dict(
-            STATE.conn.execute(
+            STATE.db.connection().execute(
                 """
                 SELECT jobs.*, rags.display_name
                 FROM jobs
@@ -289,7 +389,7 @@ def _register_api(app: FastAPI) -> None:
         if not job:
             raise HTTPException(404, "job not found")
         items = rows_to_dicts(
-            STATE.conn.execute(
+            STATE.db.connection().execute(
                 """
                 SELECT ji.*, so.object_key, so.object_type
                 FROM job_items ji
@@ -305,25 +405,100 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/v1/jobs/{job_id}/cancel")
     def cancel_job(job_id: str) -> dict[str, Any]:
-        STATE.conn.execute(
+        STATE.db.connection().execute(
             "UPDATE jobs SET status='cancelled', finished_at=? WHERE job_id=?",
             (utcnow(), job_id),
         )
-        STATE.conn.commit()
+        STATE.db.connection().commit()
         return {"job_id": job_id, "status": "cancelled"}
 
     @app.post("/api/v1/jobs/{job_id}/resume")
     def resume_job(job_id: str) -> dict[str, Any]:
-        STATE.conn.execute(
+        STATE.db.connection().execute(
             "UPDATE jobs SET status='pending', lease_owner=NULL, lease_expires_at=NULL WHERE job_id=?",
             (job_id,),
         )
-        STATE.conn.commit()
+        STATE.db.connection().commit()
         return {"job_id": job_id, "status": "pending"}
 
+    @app.get("/api/v1/version")
+    def version_api() -> dict[str, Any]:
+        return {
+            "name": "DB2RAG",
+            "version": package_version(),
+            "reranker_enabled": STATE.settings.reranker_enabled,
+        }
+
+    @app.get("/api/v1/rags/{rag_id}/dify-config")
+    def dify_config(rag_id: str) -> dict[str, Any]:
+        row = row_to_dict(STATE.db.connection().execute("SELECT rag_id FROM rags WHERE rag_id=?", (rag_id,)).fetchone())
+        if not row:
+            raise HTTPException(404, "rag not found")
+        port = STATE.settings.api_port
+        return {
+            "endpoint_docker": f"http://host.docker.internal:{port}/api/v1/dify",
+            "endpoint_local": f"http://127.0.0.1:{port}/api/v1/dify",
+            "knowledge_id": rag_id,
+            "auth_required": configured_api_key(STATE.settings.api_key) is not None,
+            "default_acl": STATE.settings.dify_default_acl,
+        }
+
+    @app.post("/api/v1/dify/retrieval")
+    def dify_retrieval(body: DifyRetrievalRequest) -> Any:
+        if body.knowledge_id == "":
+            return {"records": []}
+        row = row_to_dict(
+            STATE.db.connection().execute("SELECT rag_id FROM rags WHERE rag_id=?", (body.knowledge_id,)).fetchone()
+        )
+        if not row:
+            return JSONResponse(
+                status_code=404,
+                content={"error_code": 2001, "error_msg": "The knowledge does not exist"},
+            )
+        try:
+            filters = metadata_to_filters(body.metadata_condition, default_acl=STATE.settings.dify_default_acl)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error_code": 400, "error_msg": str(exc)})
+        if not body.query.strip():
+            return {"records": []}
+        try:
+            found = run_search(
+                STATE.db.connection(),
+                STATE.store,
+                STATE.embedder,
+                rag_id=body.knowledge_id,
+                query=body.query,
+                top_k=body.retrieval_setting.top_k,
+                score_threshold=body.retrieval_setting.score_threshold,
+                acl_tags=filters.acl_tags,
+                source_types=filters.source_types,
+                expand_parent=True,
+                hybrid=True,
+                dedup_parent=True,
+                use_reranker=False,
+                reranker=STATE.reranker,
+            )
+        except ValueError:
+            return JSONResponse(
+                status_code=404,
+                content={"error_code": 2001, "error_msg": "The knowledge does not exist"},
+            )
+        records = to_dify_records(
+            list(found.get("hits") or []),
+            rag_id=body.knowledge_id,
+            content_mode=STATE.settings.dify_content_mode,
+        )
+        records = filter_section(records, filters.section_contains)
+        return {"records": records[: body.retrieval_setting.top_k]}
+
     @app.post("/api/v1/search")
-    def search_api(body: SearchRequest) -> dict[str, Any]:
+    def search_api(body: SearchRequest) -> Any:
         filters = body.filters or {}
+        if _lan_requires_acl(filters):
+            return JSONResponse(
+                status_code=403,
+                content={"error_code": 403, "error_msg": "acl_tags is required"},
+            )
         raw_sources = filters.get("source_types") if "source_types" in filters else filters.get("source_type")
         if isinstance(raw_sources, str):
             source_types = [raw_sources] if raw_sources and raw_sources not in {"すべて", "all"} else None
@@ -333,7 +508,7 @@ def _register_api(app: FastAPI) -> None:
             source_types = None
         try:
             return run_search(
-                STATE.conn,
+                STATE.db.connection(),
                 STATE.store,
                 STATE.embedder,
                 rag_id=body.rag_id,
@@ -344,6 +519,9 @@ def _register_api(app: FastAPI) -> None:
                 source_types=source_types,
                 expand_parent=body.expand_parent,
                 hybrid=body.hybrid,
+                dedup_parent=body.dedup_parent,
+                use_reranker=body.use_reranker,
+                reranker=STATE.reranker,
             )
         except ValueError as exc:
             raise HTTPException(404, str(exc)) from exc
@@ -391,7 +569,7 @@ def _register_api(app: FastAPI) -> None:
         return {"est_chunks": None, "note": "mysql estimate after object listing"}
 
     @app.post("/api/v1/files/upload")
-    async def upload(files: list[UploadFile] = File(...)) -> dict[str, Any]:
+    async def upload(files: list[UploadFile] = File(...)) -> dict[str, Any]:  # noqa: B008
         dest_dir = STATE.settings.uploads_dir() / utcnow().replace(":", "")
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_root = dest_dir.resolve()
@@ -414,13 +592,31 @@ def _register_api(app: FastAPI) -> None:
             saved.append(str(target))
         return {"paths": saved}
 
+    @app.post("/api/v1/eval/run")
+    def eval_run(body: EvalRunRequest) -> dict[str, Any]:
+        path = Path(body.dataset) if body.dataset else repo_root() / "testdata" / "eval_baseline.json"
+        if not path.is_file():
+            raise HTTPException(400, "dataset not found")
+        try:
+            return run_evaluation(
+                STATE.db.connection(),
+                STATE.store,
+                STATE.embedder,
+                rag_id=body.rag_id,
+                dataset=load_dataset(path),
+                top_k=body.top_k,
+                score_threshold=body.score_threshold,
+            )
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.post("/api/v1/export")
     def export_api(body: dict[str, str]) -> dict[str, Any]:
         rag_id = body.get("rag_id")
         if not rag_id:
             raise HTTPException(400, "rag_id required")
         try:
-            return export_rag(STATE.conn, rag_id, STATE.settings.exports_dir())
+            return export_rag(STATE.db.connection(), rag_id, STATE.settings.exports_dir())
         except ValueError as exc:
             raise HTTPException(404, str(exc)) from exc
 
@@ -436,6 +632,19 @@ def _register_api(app: FastAPI) -> None:
             "w1": {"auto_next": False, "confirm_required": True},
             "w2": {"auto_next": True},
         }
+
+
+def _lan_requires_acl(filters: dict[str, Any]) -> bool:
+    """LAN では acl_tags なしの検索を拒否する。loopback の画面はそのまま。"""
+    settings = getattr(STATE, "settings", None)
+    if settings is None or not settings.require_acl_in_lan or is_loopback(settings.host):
+        return False
+    tags = filters.get("acl_tags")
+    if isinstance(tags, str):
+        return not tags.strip()
+    if isinstance(tags, list):
+        return not any(str(item).strip() for item in tags)
+    return True
 
 
 def _acl(raw: str) -> str:

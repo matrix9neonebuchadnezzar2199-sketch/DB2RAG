@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from db2rag.config import Settings
 from db2rag.constants import HEARTBEAT_SECONDS, LEASE_TTL_SECONDS
-from db2rag.db import row_to_dict, utcnow
+from db2rag.db import DbManager, row_to_dict
 from db2rag.embedding import Embedder
 from db2rag.pipeline import process_job
 from db2rag.qdrant_store import QdrantStore
 
 
-def acquire_lease(conn: sqlite3.Connection, worker_id: str) -> dict | None:
+def acquire_lease(conn: sqlite3.Connection, worker_id: str) -> dict[str, Any] | None:
     now = datetime.now(UTC)
     expires = (now + timedelta(seconds=LEASE_TTL_SECONDS)).replace(microsecond=0).isoformat()
     now_s = now.replace(microsecond=0).isoformat()
@@ -59,13 +59,14 @@ def heartbeat_once(conn: sqlite3.Connection, worker_id: str) -> None:
 
 
 def run_worker_loop(
-    conn: sqlite3.Connection,
+    db: DbManager,
     store: QdrantStore,
     embedder: Embedder,
     settings: Settings,
     stop: threading.Event,
 ) -> None:
     embedder.load()
+    conn = db.connection()
     while not stop.is_set():
         job = acquire_lease(conn, settings.worker_id)
         if job is None:
@@ -73,16 +74,22 @@ def run_worker_loop(
             continue
         beat = threading.Event()
 
-        def _heart() -> None:
+        def _heart(beat: threading.Event = beat) -> None:
+            beat_conn = db.connection()
             while not beat.is_set() and not stop.is_set():
-                heartbeat_once(conn, settings.worker_id)
+                heartbeat_once(beat_conn, settings.worker_id)
                 beat.wait(HEARTBEAT_SECONDS)
 
         thread = threading.Thread(target=_heart, name="db2rag-heartbeat", daemon=True)
         thread.start()
         try:
-            password = None
-            process_job(conn, store, embedder, job, mysql_password=password)
+            process_job(
+                conn,
+                store,
+                embedder,
+                job,
+                secrets_key_path=settings.secrets_key_path(),
+            )
         finally:
             beat.set()
             thread.join(timeout=2)

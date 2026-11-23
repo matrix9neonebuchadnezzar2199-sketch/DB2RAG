@@ -46,8 +46,9 @@ DB2RAG は「業務データを検索可能な知識ベースにする」こと�
 | ファイル / MySQL の取り込みと変換 | チャット UI |
 | Parent-Child chunk と Ruri embedding | LLM 学習 / fine-tune |
 | Qdrant hybrid 検索プレビュー | クラウド Vector DB |
-| JSONL.zst export（他システム再 ingest 用） | OpenAI embeddings 互換 API |
-| RAG の削除（secure purge） | 本番向け reranker |
+| JSONL.zst export（他システム再 ingest 用） | Dify 本体の改修 |
+| RAG の削除（secure purge） | 既定で有効な Reranker |
+| Dify 外部知識 API（検索結果の返却） | チャット UI |
 
 処理の流れ:
 
@@ -332,6 +333,29 @@ OCR・下書き保存・評価セット保存は未実装です。画面上は d
 | POST | `/api/v1/export` | JSONL.zst + manifest |
 | POST | `/api/v1/embed/golden` | Ruri golden vector |
 | POST | `/api/v1/capacity/estimate` | ファイル件数からの容量見積 |
+| GET | `/api/v1/version` | ツール名と `pyproject.toml` の版 |
+| GET | `/api/v1/rags/{id}/dify-config` | Dify 登録用 Endpoint と knowledge_id |
+| POST | `/api/v1/dify/retrieval` | Dify 外部知識 API |
+| POST | `/api/v1/eval/run` | 評価セットの実行 |
+
+### Dify 連携
+
+Dify のコードは変えません。Dify の外部知識で Endpoint に次を登録します。
+
+- Docker 内の Dify から: `http://host.docker.internal:8781/api/v1/dify`
+- 同じ PC から: `http://127.0.0.1:8781/api/v1/dify`
+
+`knowledge_id` は RAG ID です。一覧の「Dify連携」でコピーできます。`DB2RAG_API_KEY` を設定したときは `Authorization: Bearer` が必要です。ACL 条件が無い検索は `DB2RAG_DIFY_DEFAULT_ACL`（既定 `internal`）に絞ります。
+
+### MySQL の詳細
+
+ジョブ作成時に任意で渡せます。
+
+- `mysql_templates`: キーは `schema.table`。`updated_at_column` があると、その列が前回より新しい行だけを取り込みます
+- `custom_sql`: `object_key` と READ ONLY の `sql`。画面では `sql_id` も同じキーです
+- `mysql_pk_overrides`: 主キーの無いオブジェクトの列
+
+ウィザードの「詳細設定（任意）」が同じ項目です。
 
 リクエスト／レスポンスの型は OpenAPI（`/docs`）を見てください。
 
@@ -348,7 +372,15 @@ uv run db2rag serve --help
 | `worker` | worker だけ（通常は serve 内で動く） |
 | `testdata` | SQL / PDF / XLSX / CSV / DOCX / MD の試験データ |
 | `ingest-files` | パスからジョブを切る |
+| `eval` | `testdata/eval_baseline.json` などで Recall / MRR を測る |
 | `schema-version` | SQLite schema 版 |
+
+```powershell
+uv run db2rag eval --rag-id <rag_id> --dataset testdata/eval_baseline.json --threshold 0.0
+uv run db2rag --version
+```
+
+gate 未達のとき `eval` は exit 1 です。未測定の指標は合格にしません。
 
 全フラグは `--help` が正本です。
 
@@ -366,6 +398,10 @@ uv run db2rag serve --help
 | `DB2RAG_EMBEDDING_BACKEND` | `ruri` | `hash` は単体試験用（検索品質は見ない） |
 | `DB2RAG_HF_OFFLINE` | `false` | モデル取得後のオフライン |
 | `DB2RAG_ALLOW_BIND_ALL` | `false` | loopback 以外への bind 許可 |
+| `DB2RAG_API_KEY` | 空 | 設定時は Dify 検索に Bearer が必要。非 loopback では必須 |
+| `DB2RAG_DIFY_CONTENT_MODE` | `parent` | Dify へ返す本文。`child` は子チャンク |
+| `DB2RAG_DIFY_DEFAULT_ACL` | `internal` | ACL 条件が無いときの強制 ACL |
+| `DB2RAG_RERANKER_ENABLED` | `false` | true のときだけ Reranker を使える |
 
 `data/` は git 管理外です。ベクトル・SQLite・アップロードをリポジトリに混ぜません。
 
@@ -406,8 +442,11 @@ uv run python TEST.py --hash-embed
 | P4 | ファイル（と任意で MySQL）ingest → 検索 |
 | P5 | `/api/v1/health` |
 | P6 | `/` `/wizard` `/jobs` `/search` とウィザード契約 |
+| append-retention | 追記後も既存ファイルの文言が検索できる |
+| dify-retrieval | 空の knowledge_id と `records` 配列 |
+| eval-baseline | `db2rag eval` がメトリクスを返す |
 
-`--hash-embed` は Ruri 無しの煙テストです。検索品質は見ません。
+`--hash-embed` は Ruri 無しの煙テストです。検索品質は見ません。ストーリーの再実行は [docs/user-stories/README.md](docs/user-stories/README.md) です。
 
 ## トラブルシューティング
 

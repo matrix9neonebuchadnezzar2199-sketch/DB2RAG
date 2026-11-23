@@ -84,7 +84,7 @@ Source登録 → Job作成 → discover → snapshot → extract → normalize
 
 ---
 
-## 6. 設計書索引（全 21 文書）
+## 6. 設計書索引（全 22 文書）
 
 | # | ファイル | 内容 |
 |---|---|---|
@@ -109,6 +109,7 @@ Source登録 → Job作成 → discover → snapshot → extract → normalize
 | 18 | `18_test_and_eval.md` | 120 問 eval、Gate |
 | 19 | `19_implementation_backlog.md` | PHASE 00〜10 実装計画 |
 | 20 | `20_open_questions.md` | 外部依存 OQ（6 件） |
+| 21 | `21_v02_audit_and_overhaul_plan.md` | v0.2.0 完成度評価・全体改修設計・Phase 1〜6 Grok 実装指示書 |
 
 ---
 

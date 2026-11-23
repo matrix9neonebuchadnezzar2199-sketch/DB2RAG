@@ -14,6 +14,19 @@ def table_blocks(
     page: int | None = None,
     max_rows: int = 20,
 ) -> list[Block]:
+    """Render a table as searchable text blocks.
+
+    Args:
+        headers: Column names. Missing names are filled by the caller.
+        rows: Body rows. Each row is a list of cell strings.
+        section_path: Section label repeated on every block.
+        sheet_name: Sheet name, when the source is a workbook.
+        page: Page number, when the source is paginated.
+        max_rows: Maximum data rows per block.
+
+    Returns:
+        One or more ``table`` blocks. Headers are repeated on each block.
+    """
     blocks: list[Block] = []
     if not headers:
         headers = [f"列{i + 1}" for i in range(max((len(r) for r in rows), default=0))]

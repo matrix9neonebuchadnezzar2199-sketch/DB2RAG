@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from db2rag.constants import MAX_CHILD_CHARS, TOKEN_CHAR_RATIO
 from db2rag.ids import new_id, point_id_for_child
 from db2rag.parsers.canonical import CanonicalDocument
 from db2rag.textnorm import normalize_section_path, normalize_text
 
+# PDF の章・条分割は parsers/office.py。この式は既存参照のために残す。
 HEADING_RE = re.compile(r"^(第[0-9一二三四五六七八九十百]+[章節款条]|#{1,6}\s+)")
+_OVERLAP_BOUNDARY = frozenset("\n。．！？")
 
 
 @dataclass
@@ -62,10 +65,23 @@ class ChunkResult:
     children: list[ChildChunk]
 
 
-def infer_doc_kind(mime: str, extra: dict | None = None) -> str:
+def infer_doc_kind(mime: str, extra: dict[str, Any] | None = None) -> str:
+    """Choose chunk parameters for a document.
+
+    Args:
+        mime: MIME type of the source document.
+        extra: Optional hints. ``kind`` forces a parameter set. A
+            ``source_type`` of ``mysql`` is resolved before any MIME rule.
+
+    Returns:
+        Key of ``PARAMS``.
+    """
     extra = extra or {}
     if extra.get("kind"):
         return str(extra["kind"])
+    # MIME より先。text/plain や csv の MySQL 行を txtmd / table にしない。
+    if extra.get("source_type") == "mysql":
+        return "mysql"
     if mime in {"text/csv", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}:
         return "table"
     if mime == "application/pdf":
@@ -74,12 +90,20 @@ def infer_doc_kind(mime: str, extra: dict | None = None) -> str:
         return "docx"
     if mime in {"text/markdown", "text/plain"}:
         return "txtmd"
-    if extra.get("source_type") == "mysql":
-        return "mysql"
     return "txtmd"
 
 
 def chunk_document(document: CanonicalDocument, kind: str | None = None) -> ChunkResult:
+    """Split a canonical document into parent and child chunks.
+
+    Args:
+        document: Parsed document.
+        kind: Parameter key. When omitted, ``infer_doc_kind`` chooses it.
+
+    Returns:
+        Parent chunks and their child chunks. Children after the first in a
+        split parent are prefixed with the section path when it fits.
+    """
     params = PARAMS[kind or infer_doc_kind(document.mime, document.extra)]
     parents: list[ParentChunk] = []
     children: list[ChildChunk] = []
@@ -112,7 +136,7 @@ def chunk_document(document: CanonicalDocument, kind: str | None = None) -> Chun
                 token_estimate=max(1, int(len(part_text) / TOKEN_CHAR_RATIO)),
             )
             parents.append(parent)
-            child_texts = _split_child(part_text, params)
+            child_texts = _prefix_later_children(_split_child(part_text, params), section)
             for child_index, child_text in enumerate(child_texts):
                 child_id = new_id("chk")
                 children.append(
@@ -206,12 +230,67 @@ def _split_child(text: str, params: ChunkParams) -> list[str]:
         else:
             merged.append(chunk)
     if params.overlap > 0 and len(merged) > 1:
-        overlapped = [merged[0]]
-        for index in range(1, len(merged)):
-            prev_tail = merged[index - 1][-params.overlap :]
-            overlapped.append((prev_tail + merged[index])[:MAX_CHILD_CHARS])
-        merged = overlapped
-    return [item[:MAX_CHILD_CHARS] for item in merged if item.strip()]
+        merged = _apply_overlap(merged, params.overlap)
+    else:
+        merged = [_limit_child(item) for item in merged]
+    return [item for item in merged if item.strip()]
+
+
+def _limit_child(text: str) -> str:
+    # 本体だけで上限を超えるときだけ切る。重なりでは使わない。
+    if len(text) <= MAX_CHILD_CHARS:
+        return text
+    return text[:MAX_CHILD_CHARS]
+
+
+def _overlap_tail(prev: str, overlap: int) -> str:
+    # 窓内の最初の改行・句点の直後から取る。途中の文を先頭にしない。
+    if overlap <= 0 or not prev:
+        return ""
+    tail = prev[-overlap:]
+    for index, char in enumerate(tail):
+        if char not in _OVERLAP_BOUNDARY:
+            continue
+        if index + 1 >= len(tail):
+            return tail
+        trimmed = tail[index + 1 :].lstrip(" \t")
+        return trimmed or tail
+    return tail
+
+
+def _apply_overlap(chunks: list[str], overlap: int) -> list[str]:
+    # はみ出す分は接頭辞だけ縮める。新しい本体の末尾は残す。
+    bodies = [_limit_child(chunk) for chunk in chunks]
+    if overlap <= 0 or len(bodies) <= 1:
+        return bodies
+    overlapped = [bodies[0]]
+    for index in range(1, len(bodies)):
+        body = bodies[index]
+        if len(body) >= MAX_CHILD_CHARS:
+            overlapped.append(body)
+            continue
+        available = MAX_CHILD_CHARS - len(body)
+        prefix = _overlap_tail(bodies[index - 1], min(overlap, available))
+        if len(prefix) > available:
+            prefix = prefix[-available:]
+        overlapped.append(prefix + body)
+    return overlapped
+
+
+def _prefix_later_children(child_texts: list[str], section: str) -> list[str]:
+    # 2 件目以降だけ節パスを足す。入らないときは本体を切らずに諦める。
+    if len(child_texts) <= 1 or not section:
+        return child_texts
+    label = f"【{section}】\n"
+    prefixed = [child_texts[0]]
+    for child_text in child_texts[1:]:
+        head = child_text.lstrip()
+        probe = head[: len(label) + len(section)]
+        if section in probe or len(label) + len(child_text) > MAX_CHILD_CHARS:
+            prefixed.append(child_text)
+            continue
+        prefixed.append(label + child_text)
+    return prefixed
 
 
 def _cut_overflow(text: str, params: ChunkParams) -> list[str]:

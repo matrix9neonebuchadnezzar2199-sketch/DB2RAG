@@ -11,7 +11,7 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/"><span class="brand-mark">R</span><span class="brand-copy"><strong>DB2RAG</strong><small>LOCAL KNOWLEDGE FORGE</small></span></a>
+    <a class="brand" href="/"><span class="brand-mark">R</span><span class="brand-copy"><strong>DB2RAG</strong><small data-app-version>v…</small></span></a>
     <span class="environment-pill"><span class="live-dot"></span>HYBRID SEARCH / READY</span>
     <span class="topbar-spacer"></span>
     <div class="topbar-controls">
@@ -86,6 +86,8 @@
             <div class="field" style="margin-top: 11px;"><label for="section-filter">見出し階層</label><input id="section-filter" placeholder="例: 第5章 > 休暇" disabled title="見出しフィルタは未実装です"></div>
             <div class="toggle-row"><div class="toggle-copy"><strong>Hybrid検索</strong><span>Dense + BM25 + RRF。既定ON。</span></div><span class="switch on" id="hybrid-switch"></span></div>
             <div class="toggle-row"><div class="toggle-copy"><strong>Parent展開</strong><span>結果に親文脈を付与します。</span></div><span class="switch on" id="parent-switch"></span></div>
+            <div class="toggle-row"><div class="toggle-copy"><strong>親チャンク重複統合</strong><span>同じ親は1件にまとめます。既定ON。</span></div><span class="switch on" id="dedup-switch"></span></div>
+            <div class="toggle-row"><div class="toggle-copy"><strong>Reranker</strong><span id="reranker-note">設定が無効のときは操作できません。</span></div><span class="switch is-disabled" id="reranker-switch" aria-disabled="true"></span></div>
           </section>
 
           <section class="card">
@@ -97,7 +99,7 @@
             </div>
             <div class="diagnostic" style="margin-top: 12px;"><span class="diagnostic-icon">✓</span><div><strong>Query prefix</strong><span class="mono">検索クエリ: {query}</span></div></div>
             <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>ACL filter</strong><span id="search-explain-acl">検索時に確定</span></div></div>
-            <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>Reranker</strong><span>OFF · 本ツールのスコープ外</span></div></div>
+            <div class="diagnostic"><span class="diagnostic-icon">✓</span><div><strong>Reranker</strong><span id="reranker-diag">OFF · 設定が無効のときは操作できません</span></div></div>
           </section>
 
           <section class="card">

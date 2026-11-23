@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import subprocess
@@ -25,10 +26,8 @@ Status = Literal["pass", "fail", "skip", "warn"]
 
 
 def _print(text: str) -> None:
-    try:
+    with contextlib.suppress(Exception):
         sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
     try:
         print(text)
     except UnicodeEncodeError:
@@ -91,7 +90,12 @@ def http_json(method: str, url: str, payload: dict[str, Any] | None = None, time
         raise RuntimeError(f"HTTP {method} {url} failed: {exc}") from exc
 
 
-def run(cmd: list[str], cwd: Path | None = None, timeout: int = 120) -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: list[str],
+    cwd: Path | None = None,
+    timeout: int = 120,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
         cwd=str(cwd or REPO),
@@ -100,6 +104,7 @@ def run(cmd: list[str], cwd: Path | None = None, timeout: int = 120) -> subproce
         timeout=timeout,
         encoding="utf-8",
         errors="replace",
+        env=env,
     )
 
 
@@ -403,6 +408,94 @@ def main() -> int:
                 "pass" if "1歳" in blob else "fail",
                 (blob[:200]),
                 time.perf_counter() - s0,
+            )
+
+        if rag_id and not mysql_ok:
+            started = time.perf_counter()
+            _, append_job = http_json(
+                "POST",
+                f"{args.api_url}/api/v1/jobs",
+                {
+                    "mode": "append",
+                    "rag_id": rag_id,
+                    "display_name": "testdata-files",
+                    "acl_tag": "internal",
+                    "source_type": "file",
+                    "paths": [str(REPO / "testdata" / "files" / "faq_remote.txt")],
+                },
+                timeout=60,
+            )
+            appended = wait_job(args.api_url, append_job["job_id"])
+            report.add(
+                "append-job",
+                "pass" if appended.get("status") == "completed" else "fail",
+                f"job={appended.get('status')}",
+                time.perf_counter() - started,
+            )
+
+        if rag_id:
+            started = time.perf_counter()
+            _, kept = http_json(
+                "POST",
+                f"{args.api_url}/api/v1/search",
+                {"rag_id": rag_id, "query": "有給休暇の申請期限", "top_k": 10, "score_threshold": 0.0, "filters": {"acl_tags": ["internal"]}},
+                timeout=120,
+            )
+            kept_blob = json.dumps(kept, ensure_ascii=False)
+            report.add(
+                "append-retention",
+                "pass" if "10日前" in kept_blob else "fail",
+                "既存ファイルの文言が追記後も検索できるか",
+                time.perf_counter() - started,
+            )
+            started = time.perf_counter()
+            _, probe = http_json(
+                "POST",
+                f"{args.api_url}/api/v1/dify/retrieval",
+                {"knowledge_id": "", "query": "", "retrieval_setting": {"top_k": 1, "score_threshold": 0.0}},
+                timeout=60,
+            )
+            _, dify_hits = http_json(
+                "POST",
+                f"{args.api_url}/api/v1/dify/retrieval",
+                {
+                    "knowledge_id": rag_id,
+                    "query": "有給休暇の申請期限",
+                    "retrieval_setting": {"top_k": 5, "score_threshold": 0.0},
+                },
+                timeout=120,
+            )
+            records = dify_hits.get("records")
+            dify_ok = probe == {"records": []} and isinstance(records, list)
+            report.add(
+                "dify-retrieval",
+                "pass" if dify_ok else "fail",
+                f"probe={probe} records={len(records) if isinstance(records, list) else 'invalid'}",
+                time.perf_counter() - started,
+            )
+            started = time.perf_counter()
+            evaluated = run(
+                [
+                    sys.executable,
+                    "-m",
+                    "db2rag",
+                    "eval",
+                    "--rag-id",
+                    rag_id,
+                    "--dataset",
+                    str(REPO / "testdata" / "eval_baseline.json"),
+                    "--threshold",
+                    "0.0",
+                ],
+                timeout=600,
+                env=env,
+            )
+            eval_text = (evaluated.stdout or evaluated.stderr)[-400:]
+            report.add(
+                "eval-baseline",
+                "pass" if evaluated.returncode in {0, 1} and "gate_passed" in (evaluated.stdout or "") else "fail",
+                eval_text,
+                time.perf_counter() - started,
             )
 
         started = time.perf_counter()

@@ -1,3 +1,8 @@
 """DB2RAG — local persistent RAG conversion tool."""
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("db2rag")
+except PackageNotFoundError:
+    __version__ = "0.2.0"

@@ -53,7 +53,7 @@ def export_rag(conn: sqlite3.Connection, rag_id: str, export_root: Path) -> dict
             """,
             (rag_id,),
         ):
-            payload = {key: row[key] for key in row.keys()}
+            payload = {key: row[key] for key in row}
             writer.write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
             chunk_count += 1
     manifest = {

@@ -1,6 +1,6 @@
 [project]
 name = "db2rag"
-version = "0.1.0"
+version = "0.2.0"
 description = "Convert internal MySQL and local documents into a local persistent RAG knowledge base"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -63,6 +63,10 @@ ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[[tool.mypy.overrides]]
+module = ["openpyxl", "openpyxl.*", "reportlab", "reportlab.*"]
+ignore_missing_imports = true
 
 [tool.mypy]
 python_version = "3.12"

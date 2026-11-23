@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from docx import Document
 from openpyxl import Workbook
@@ -56,7 +57,7 @@ def _esc(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "''")
 
 
-def _sql_rows(rows: list[tuple]) -> str:
+def _sql_rows(rows: list[tuple[Any, ...]]) -> str:
     rendered = []
     for row in rows:
         parts = []
@@ -218,5 +219,5 @@ def _write_docx(path: Path) -> Path:
     document.add_heading("育児・介護休業規程", level=1)
     document.add_heading("育児休業", level=2)
     document.add_paragraph(CHILDCARE)
-    document.save(path)
+    document.save(str(path))
     return path
