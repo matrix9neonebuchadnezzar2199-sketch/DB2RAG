@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-24
+
+### Fixed
+
+- Dify の `score_threshold` を返却スコア（RRF）に適用する。section 絞り込みの前に候補を多めに取る
+- MySQL 増分は `>=` と `ORDER BY` にし、カーソルはオブジェクト完了後にだけ進める
+- エクスポートは `is_latest=1` だけを出す
+- 評価データセットのパスを `testdata/` と `data/eval/` に限定する
+- `serve --port` を `DB2RAG_API_PORT` に渡し、Dify 案内 URL のポートを合わせる
+- Markdown も文字コードフォールバックで読む
+
+### Added
+
+- Dify 連携ダイアログに SSRF 許可設定（`SSRF_PROXY_ALLOW_PRIVATE_DOMAINS=host.docker.internal`）を表示する
+- RAG 作成時の ACL を Dify 未指定時の既定 ACL にする
+- 未知の Dify metadata フィールドは 400 にせず warnings で無視する
+- LAN で API キーが必要なとき、画面はタブ内の Bearer を送る
+- 評価の合否は Hard-negative の 1 位率を見る。`TEST.py` は評価を API で実行する
+- 全件走査オプションで、MySQL から消えた行を RAG から外せる
+- SQLite schema version を 3 にする
+
 ## [0.2.0] - 2026-11-23
 
 ### Added

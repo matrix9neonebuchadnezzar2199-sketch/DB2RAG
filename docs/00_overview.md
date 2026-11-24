@@ -84,7 +84,7 @@ Source登録 → Job作成 → discover → snapshot → extract → normalize
 
 ---
 
-## 6. 設計書索引（全 22 文書）
+## 6. 設計書索引（全 23 文書）
 
 | # | ファイル | 内容 |
 |---|---|---|
@@ -105,11 +105,12 @@ Source登録 → Job作成 → discover → snapshot → extract → normalize
 | 14 | `14_local_ai_integration.md` | AISSS 連携、export |
 | 15 | `15_security_and_ops.md` | セキュリティ、backup、purge |
 | 16 | `16_error_handling.md` | retry、lease、checkpoint |
-| 17 | `17_adr.md` | 設計決定記録（11 ADR） |
+| 17 | `17_adr.md` | 設計決定記録（13 ADR） |
 | 18 | `18_test_and_eval.md` | 120 問 eval、Gate |
 | 19 | `19_implementation_backlog.md` | PHASE 00〜10 実装計画 |
 | 20 | `20_open_questions.md` | 外部依存 OQ（6 件） |
 | 21 | `21_v02_audit_and_overhaul_plan.md` | v0.2.0 完成度評価・全体改修設計・Phase 1〜6 Grok 実装指示書 |
+| 22 | `22_v021_review_and_fix_plan.md` | v0.2.0 再監査・欠陥 B-01〜B-17・Phase 7（v0.2.1）Grok 実装指示書 |
 
 ---
 
@@ -128,6 +129,8 @@ Source登録 → Job作成 → discover → snapshot → extract → normalize
 | 009 | AISSS 連携は API/export 優先 |
 | 010 | GPU lease worker |
 | 011 | 承認済み5画面 + 折りたたみ式統合ウィザード |
+| 012 | LAN 画面はタブ内 Bearer |
+| 013 | 未知の Dify metadata は無視して warnings |
 
 ---
 

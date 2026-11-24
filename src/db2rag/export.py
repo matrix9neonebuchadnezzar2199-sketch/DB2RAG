@@ -33,7 +33,7 @@ def export_rag(conn: sqlite3.Connection, rag_id: str, export_root: Path) -> dict
             FROM document_versions d
             JOIN source_objects o ON d.object_id=o.object_id
             JOIN sources s ON o.source_id=s.source_id
-            WHERE s.rag_id=?
+            WHERE s.rag_id=? AND d.is_latest=1
             """,
             (rag_id,),
         ):
@@ -49,7 +49,7 @@ def export_rag(conn: sqlite3.Connection, rag_id: str, export_root: Path) -> dict
             JOIN document_versions d ON p.doc_version_id=d.doc_version_id
             JOIN source_objects o ON d.object_id=o.object_id
             JOIN sources s ON o.source_id=s.source_id
-            WHERE s.rag_id=?
+            WHERE s.rag_id=? AND d.is_latest=1
             """,
             (rag_id,),
         ):

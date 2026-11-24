@@ -40,6 +40,34 @@ class EvalDataset(BaseModel):
     questions: list[EvalQuestion]
 
 
+class EvalPathError(ValueError):
+    """評価データセットのパスが許可ディレクトリの外。"""
+
+
+def resolve_eval_dataset(raw: str | None) -> Path:
+    """testdata/ と data/eval/ の相対パスだけを開く。
+
+    Raises:
+        EvalPathError: 絶対パス、``..``、許可外、またはファイルが無いとき。
+    """
+    from db2rag.config import repo_root
+
+    root = repo_root().resolve()
+    allowed = [(root / "testdata").resolve(), (root / "data" / "eval").resolve()]
+    if raw is None or not raw.strip():
+        path = (root / "testdata" / "eval_baseline.json").resolve()
+    else:
+        candidate = Path(raw)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise EvalPathError("dataset path is not allowed")
+        path = (root / candidate).resolve()
+    if not any(path == base or base in path.parents for base in allowed):
+        raise EvalPathError("dataset path is not allowed")
+    if not path.is_file():
+        raise EvalPathError("dataset not found")
+    return path
+
+
 def load_dataset(path: Path) -> EvalDataset:
     payload = json.loads(path.read_text(encoding="utf-8"))
     return EvalDataset.model_validate(payload)
@@ -56,11 +84,14 @@ def run_evaluation(
     score_threshold: float = 0.0,
 ) -> dict[str, Any]:
     """各問を検索し、メトリクスと gate を保存する。"""
-    answered = [item for item in dataset.questions if item.has_answer and _has_expected(item)]
-    hard = [item for item in dataset.questions if _is_hard_negative(item)]
+    answered_ids = {
+        item.question_id for item in dataset.questions if item.has_answer and _has_expected(item)
+    }
+    hard_ids = {item.question_id for item in dataset.questions if _is_hard_negative(item)}
     ranks: list[int | None] = []
     empty = 0
     false_positives = 0
+    top1_false = 0
     latencies: list[float] = []
     misses: list[str] = []
 
@@ -80,27 +111,30 @@ def run_evaluation(
         )
         latencies.append((time.perf_counter() - started) * 1000)
         hits = list(found.get("hits") or [])
-        if item in answered:
+        if item.question_id in answered_ids:
             rank = _first_relevant_rank(hits, item)
             ranks.append(rank)
             if not hits:
                 empty += 1
             if rank is None:
                 misses.append(item.question_id)
-        if item in hard and _forbidden_in_top(hits, item, 5):
+        if item.question_id in hard_ids and _forbidden_in_top(hits, item, 5):
             false_positives += 1
+        if item.question_id in hard_ids and _forbidden_in_top(hits, item, 1):
+            top1_false += 1
 
     metrics: dict[str, Any] = {
         "recall_at_5": _recall(ranks, 5),
         "recall_at_20": _recall(ranks, 20),
         "mrr_at_10": _mrr(ranks, 10),
         "ndcg_at_10": _ndcg(ranks, 10),
-        "zero_result_rate": (empty / len(answered)) if answered else None,
-        "hard_negative_fp_at_5": (false_positives / len(hard)) if hard else None,
+        "zero_result_rate": (empty / len(answered_ids)) if answered_ids else None,
+        "hard_negative_fp_at_5": (false_positives / len(hard_ids)) if hard_ids else None,
+        "hard_negative_top1_rate": (top1_false / len(hard_ids)) if hard_ids else None,
         "latency_p95_ms": _percentile(latencies, 95) if latencies else None,
         "question_count": len(dataset.questions),
-        "answered_count": len(answered),
-        "hard_negative_count": len(hard),
+        "answered_count": len(answered_ids),
+        "hard_negative_count": len(hard_ids),
         "misses": misses,
     }
     passed = _gate(metrics)
@@ -134,7 +168,7 @@ def _gate(metrics: dict[str, Any]) -> bool:
     recall = metrics.get("recall_at_5")
     mrr = metrics.get("mrr_at_10")
     zero = metrics.get("zero_result_rate")
-    hard = metrics.get("hard_negative_fp_at_5")
+    hard = metrics.get("hard_negative_top1_rate")
     if recall is None or mrr is None or zero is None or hard is None:
         return False
     return (

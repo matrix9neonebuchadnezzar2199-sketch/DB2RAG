@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+import zstandard as zstd
+from fastapi.testclient import TestClient
 
+from db2rag.api import app
 from db2rag.config import repo_root
 from db2rag.db import connect, migrate, utcnow
-from db2rag.eval import EvalDataset, EvalQuestion, load_dataset, run_evaluation
+from db2rag.eval import (
+    EvalDataset,
+    EvalPathError,
+    EvalQuestion,
+    load_dataset,
+    resolve_eval_dataset,
+    run_evaluation,
+)
+from db2rag.export import export_rag
 
 
 def _rag(tmp_path: Path) -> Any:
@@ -87,7 +99,7 @@ def test_package_version_matches_pyproject() -> None:
     from db2rag.api import package_version
 
     project = tomllib.loads((repo_root() / "pyproject.toml").read_text(encoding="utf-8"))
-    assert package_version() == project["project"]["version"] == "0.2.0"
+    assert package_version() == project["project"]["version"] == "0.2.1"
 
 
 def test_baseline_has_25_questions_and_8_hard_negatives() -> None:
@@ -98,3 +110,71 @@ def test_baseline_has_25_questions_and_8_hard_negatives() -> None:
     assert len(hard) >= 8
     assert all(item.expected_needles for item in answered)
     assert all(item.forbidden_needles for item in hard)
+
+
+def test_eval_dataset_rejects_escape(tmp_path: Path) -> None:
+    with pytest.raises(EvalPathError):
+        resolve_eval_dataset("../pyproject.toml")
+    with pytest.raises(EvalPathError):
+        resolve_eval_dataset(str(tmp_path / "outside.json"))
+
+
+def test_eval_run_endpoint_rejects_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DB2RAG_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DB2RAG_QDRANT_PATH", str(tmp_path / "qdrant"))
+    monkeypatch.setenv("DB2RAG_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("DB2RAG_API_KEY", "test-key")
+    monkeypatch.setenv("DB2RAG_HOST", "127.0.0.1")
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/eval/run",
+            headers={"Authorization": "Bearer test-key"},
+            json={"rag_id": "missing", "dataset": "../pyproject.toml"},
+        )
+    assert response.status_code == 400
+
+
+def test_export_omits_retired_versions(tmp_path: Path) -> None:
+    conn = connect(tmp_path / "db.db")
+    migrate(conn)
+    now = utcnow()
+    conn.execute(
+        """
+        INSERT INTO rags (
+            rag_id, display_name, status, qdrant_alias, schema_version,
+            acl_tag_default, created_at, updated_at
+        ) VALUES ('rag-exp', 'exp', 'active', 'alias', 1, 'internal', ?, ?)
+        """,
+        (now, now),
+    )
+    conn.execute(
+        """
+        INSERT INTO sources (
+            source_id, rag_id, source_type, source_name, config_json, acl_tag_default, enabled, created_at
+        ) VALUES ('src', 'rag-exp', 'mysql', 'hr', '{}', 'internal', 1, ?)
+        """,
+        (now,),
+    )
+    conn.execute(
+        """
+        INSERT INTO source_objects (object_id, source_id, object_type, object_key)
+        VALUES ('obj', 'src', 'table', 'hr.staff')
+        """
+    )
+    for doc_id, latest in (("old", 0), ("new", 1)):
+        conn.execute(
+            """
+            INSERT INTO document_versions (
+                doc_version_id, object_id, content_hash, pipeline_fingerprint, created_at, is_latest, record_id
+            ) VALUES (?, 'obj', ?, 'fp', ?, ?, ?)
+            """,
+            (doc_id, doc_id, now, latest, doc_id),
+        )
+    conn.commit()
+    exported = export_rag(conn, "rag-exp", tmp_path / "exports")
+    assert exported["manifest_sha256"]
+    blob = (tmp_path / "exports").joinpath(exported["export_id"], "documents.jsonl.zst").read_bytes()
+    with zstd.ZstdDecompressor().stream_reader(io.BytesIO(blob)) as reader:
+        text = reader.read().decode("utf-8")
+    rows = [json.loads(line) for line in text.splitlines()]
+    assert [row["doc_version_id"] for row in rows] == ["new"]

@@ -170,7 +170,7 @@ def test_template_and_lookup_rendering() -> None:
     )
     assert "LEFT JOIN `hr`.`status_master` AS `__lk_0`" in sql
     assert "`__label_status_code`" in sql
-    assert "WHERE `base`.`updated_at` > %s ORDER BY `base`.`updated_at` ASC" in sql
+    assert "WHERE `base`.`updated_at` >= %s ORDER BY `base`.`updated_at` ASC" in sql
     assert params == ("2024-01-01",)
     with pytest.raises(MysqlError):
         build_table_select("hr", "bad name", where_col=None, since_value=None, lookups=None)
@@ -416,3 +416,51 @@ def test_job_config_keeps_template_without_password(tmp_path: Path, monkeypatch:
     assert stored["pk_columns"]["hr.staff"] == ["id"]
     assert stored["custom_sql"][0]["sql"].startswith("SELECT")
     assert stored["secret_id"]
+
+
+def test_failed_stream_does_not_advance_cursor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Boom:
+        def __init__(self) -> None:
+            self.n = 0
+
+        def __iter__(self) -> _Boom:
+            return self
+
+        def __next__(self) -> dict[str, Any]:
+            self.n += 1
+            if self.n > 1:
+                raise RuntimeError("mid-stream")
+            return {"id": 1, "name": "ONE", "updated_at": "2024-01-01T00:00:00+00:00"}
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("db2rag.pipeline.MYSQL_BATCH_SIZE", 1)
+    _install_mysql(monkeypatch, lambda *args, **kwargs: _Boom())
+    conn = connect(tmp_path / "db.db")
+    migrate(conn)
+    store = QdrantStore(url="http://127.0.0.1:6333", path=str(tmp_path / "qdrant"))
+    embedder = Embedder(backend="hash", models_dir=tmp_path / "models")
+    created = create_job_from_mysql(
+        conn,
+        rag=None,
+        display_name="cursor",
+        acl_tag="internal",
+        mysql_config={
+            "host": "127.0.0.1",
+            "port": 3306,
+            "user": "ro",
+            "password": "s3cret-value",
+            "database": "hr",
+        },
+        tables=["hr.staff"],
+        mode="create",
+        secrets_key_path=tmp_path / "secrets.key",
+    )
+    job = dict(conn.execute("SELECT * FROM jobs WHERE job_id=?", (created["job_id"],)).fetchone())
+    process_job(conn, store, embedder, job, secrets_key_path=tmp_path / "secrets.key")
+    cursor = conn.execute("SELECT sync_cursor FROM source_objects").fetchone()["sync_cursor"]
+    status = conn.execute("SELECT status FROM job_items").fetchone()["status"]
+    assert cursor is None
+    assert status == "failed"
+    assert _child_count(conn, str(created["rag_id"])) == 1

@@ -188,6 +188,32 @@
 
 ---
 
+## ADR-012: LAN 画面の API キーはタブ内 Bearer
+
+| 項目 | 内容 |
+|---|---|
+| **決定** | 非 loopback かつ `DB2RAG_API_KEY` があるとき、bundled UI は `sessionStorage` の Bearer を付ける。鍵は localStorage に残さない |
+| **背景** | 鍵ありの LAN では `/api/v1/*` が認証必須なのに、画面がヘッダを送っていなかった |
+| **選択肢** | (A) 画面が Bearer を付ける (B) same-origin の Cookie セッション |
+| **採用理由** | (A) は既存の Bearer 照合を再利用でき、CSRF 用の新しい境界を足さない |
+| **捨てた理由** | (B) は Cookie と CSRF の実装が重い |
+| **影響** | `web/live.js`, `auth.py` |
+
+---
+
+## ADR-013: 未知の Dify metadata は無視する
+
+| 項目 | 内容 |
+|---|---|
+| **決定** | `acl_tag` / `source_type` / `section_path` 以外の metadata 条件は検索に使わず、応答の `warnings` に残す |
+| **背景** | Dify の自動 metadata が任意フィールド名を送ると、全体が 400 になって検索が止まる |
+| **選択肢** | (A) 400 で拒否 (B) 無視して警告 |
+| **採用理由** | (B) は本番の自動フィルタで検索を止めない。未知フィールドは条件に昇格させない |
+| **捨てた理由** | (A) は契約違反の早期発見には向くが、Dify 側のフィールド追加で連携が落ちる |
+| **影響** | `dify_adapter.py`, `api.py` |
+
+---
+
 ## ADR 索引
 
 | ADR | タイトル | 状態 |
@@ -203,3 +229,5 @@
 | ADR-009 | AISSS 連携境界 | Accepted |
 | ADR-010 | GPU Worker lease | Accepted |
 | ADR-011 | 5画面 + 統合ウィザード | Accepted (Master approved 2026-09-10) |
+| ADR-012 | LAN 画面の Bearer | Accepted |
+| ADR-013 | 未知 Dify metadata は無視 | Accepted |

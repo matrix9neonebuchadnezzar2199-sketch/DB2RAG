@@ -181,7 +181,23 @@ GET /api/v1/rags/{rag_id}/compatibility
 
 ---
 
-## 8. 関連文書
+## 8. Dify から届けるときの必須設定（v0.2.1）
+
+Dify 本体は変更しない。外部知識の HTTP は SSRF プロキシ（Squid）を通り、private / loopback 宛は初期状態で拒否される。`host.docker.internal` もここへ入る。
+
+Dify の `docker/.env`:
+
+```text
+SSRF_PROXY_ALLOW_PRIVATE_DOMAINS=host.docker.internal
+```
+
+書いたあと `ssrf_proxy` を再起動する。画面が `blocked by SSRF protection` のときはこの設定が空である。DB2RAG の「Dify連携」に同じ行を出す。
+
+API が `127.0.0.1` だけを listen しているとき、コンテナの `host.docker.internal` から届くかは OS と Docker の実装依存である。届かない場合は bind を LAN アドレスにし、`DB2RAG_API_KEY` を付ける。
+
+---
+
+## 9. 関連文書
 
 - `13_search_preview.md`
 - `08_vector_db_design.md`

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import tomllib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
@@ -31,7 +32,7 @@ from db2rag.dify_adapter import (
     to_dify_records,
 )
 from db2rag.embedding import Embedder
-from db2rag.eval import load_dataset, run_evaluation
+from db2rag.eval import EvalPathError, load_dataset, resolve_eval_dataset, run_evaluation
 from db2rag.export import export_rag
 from db2rag.mysql_reader import connect as mysql_connect
 from db2rag.mysql_reader import list_objects, test_connection
@@ -78,6 +79,7 @@ class JobCreateRequest(BaseModel):
     mysql_templates: dict[str, Any] = Field(default_factory=dict)
     mysql_pk_overrides: dict[str, list[str]] = Field(default_factory=dict)
     custom_sql: list[dict[str, Any]] = Field(default_factory=list)
+    reconcile_deletes: bool = False
 
 
 class SearchRequest(BaseModel):
@@ -109,11 +111,12 @@ class MysqlTestRequest(BaseModel):
 
 
 def package_version() -> str:
-    """インストール済みパッケージの版。画面と API の正本。"""
+    """インストール済みパッケージの版。未インストール時は pyproject.toml。"""
     try:
         return version("db2rag")
     except PackageNotFoundError:
-        return "0.2.0"
+        project = tomllib.loads((repo_root() / "pyproject.toml").read_text(encoding="utf-8"))
+        return str(project["project"]["version"])
 
 
 @asynccontextmanager
@@ -162,6 +165,7 @@ def mysql_job_config(
     templates: dict[str, Any],
     pk_overrides: dict[str, list[str]],
     custom_sql: list[dict[str, Any]],
+    reconcile_deletes: bool = False,
 ) -> dict[str, Any]:
     """接続設定に、表ごとのテンプレート・PK・カスタム SQL を載せる。
 
@@ -181,6 +185,8 @@ def mysql_job_config(
         stored["pk_columns"] = pk_overrides
     if custom_sql:
         stored["custom_sql"] = custom_sql
+    if reconcile_deletes:
+        stored["reconcile_deletes"] = True
     return stored
 
 
@@ -288,6 +294,11 @@ def _register_api(app: FastAPI) -> None:
             "gpu": device,
             "warnings": warnings,
             "time": utcnow(),
+            "auth": {
+                "auth_required": configured_api_key(STATE.settings.api_key) is not None
+                and not is_loopback(STATE.settings.host),
+                "loopback": is_loopback(STATE.settings.host),
+            },
         }
 
     @app.get("/api/v1/rags")
@@ -339,6 +350,7 @@ def _register_api(app: FastAPI) -> None:
                         templates=body.mysql_templates,
                         pk_overrides=body.mysql_pk_overrides,
                         custom_sql=body.custom_sql,
+                        reconcile_deletes=body.reconcile_deletes,
                     ),
                     tables=body.tables,
                     mode=body.mode,
@@ -435,12 +447,18 @@ def _register_api(app: FastAPI) -> None:
         if not row:
             raise HTTPException(404, "rag not found")
         port = STATE.settings.api_port
+        default_acl = _dify_acl_for(rag_id)
         return {
             "endpoint_docker": f"http://host.docker.internal:{port}/api/v1/dify",
             "endpoint_local": f"http://127.0.0.1:{port}/api/v1/dify",
             "knowledge_id": rag_id,
             "auth_required": configured_api_key(STATE.settings.api_key) is not None,
-            "default_acl": STATE.settings.dify_default_acl,
+            "default_acl": default_acl,
+            "dify_ssrf_env_hint": {
+                "variable": "SSRF_PROXY_ALLOW_PRIVATE_DOMAINS",
+                "example_value": "host.docker.internal",
+                "restart_note": "Dify の docker/.env に書いて ssrf_proxy を再起動する。未設定だと private 宛の外部知識が遮断される。",
+            },
         }
 
     @app.post("/api/v1/dify/retrieval")
@@ -456,11 +474,13 @@ def _register_api(app: FastAPI) -> None:
                 content={"error_code": 2001, "error_msg": "The knowledge does not exist"},
             )
         try:
-            filters = metadata_to_filters(body.metadata_condition, default_acl=STATE.settings.dify_default_acl)
+            filters = metadata_to_filters(body.metadata_condition, default_acl=_dify_acl_for(body.knowledge_id))
         except ValueError as exc:
             return JSONResponse(status_code=400, content={"error_code": 400, "error_msg": str(exc)})
         if not body.query.strip():
             return {"records": []}
+        # Dify は返却 score（RRF）で閾値判定する。dense 足切りには渡さない。
+        fetch_k = min(50, body.retrieval_setting.top_k * 3)
         try:
             found = run_search(
                 STATE.db.connection(),
@@ -468,8 +488,8 @@ def _register_api(app: FastAPI) -> None:
                 STATE.embedder,
                 rag_id=body.knowledge_id,
                 query=body.query,
-                top_k=body.retrieval_setting.top_k,
-                score_threshold=body.retrieval_setting.score_threshold,
+                top_k=fetch_k,
+                score_threshold=0.0,
                 acl_tags=filters.acl_tags,
                 source_types=filters.source_types,
                 expand_parent=True,
@@ -489,7 +509,12 @@ def _register_api(app: FastAPI) -> None:
             content_mode=STATE.settings.dify_content_mode,
         )
         records = filter_section(records, filters.section_contains)
-        return {"records": records[: body.retrieval_setting.top_k]}
+        threshold = body.retrieval_setting.score_threshold
+        records = [record for record in records if float(record["score"]) >= threshold]
+        payload: dict[str, Any] = {"records": records[: body.retrieval_setting.top_k]}
+        if filters.warnings:
+            payload["warnings"] = filters.warnings
+        return payload
 
     @app.post("/api/v1/search")
     def search_api(body: SearchRequest) -> Any:
@@ -594,9 +619,10 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/v1/eval/run")
     def eval_run(body: EvalRunRequest) -> dict[str, Any]:
-        path = Path(body.dataset) if body.dataset else repo_root() / "testdata" / "eval_baseline.json"
-        if not path.is_file():
-            raise HTTPException(400, "dataset not found")
+        try:
+            path = resolve_eval_dataset(body.dataset)
+        except EvalPathError as exc:
+            raise HTTPException(400, str(exc)) from exc
         try:
             return run_evaluation(
                 STATE.db.connection(),
@@ -632,6 +658,20 @@ def _register_api(app: FastAPI) -> None:
             "w1": {"auto_next": False, "confirm_required": True},
             "w2": {"auto_next": True},
         }
+
+
+def _dify_acl_for(rag_id: str) -> str:
+    """RAG 行の Dify 既定 ACL。未設定ならその RAG の acl_tag_default。"""
+    row = row_to_dict(STATE.db.connection().execute("SELECT * FROM rags WHERE rag_id=?", (rag_id,)).fetchone())
+    if row is None:
+        return STATE.settings.dify_default_acl
+    custom = row.get("dify_default_acl")
+    if isinstance(custom, str) and custom.strip():
+        return custom.strip()
+    tag = row.get("acl_tag_default")
+    if isinstance(tag, str) and tag.strip():
+        return tag.strip()
+    return STATE.settings.dify_default_acl
 
 
 def _lan_requires_acl(filters: dict[str, Any]) -> bool:

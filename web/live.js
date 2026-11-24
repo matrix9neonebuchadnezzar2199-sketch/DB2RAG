@@ -33,8 +33,37 @@
     return String(detail);
   }
 
+  function storedApiKey() {
+    try {
+      return sessionStorage.getItem("db2rag_api_key") || "";
+    } catch {
+      return "";
+    }
+  }
+
+  async function ensureApiKey() {
+    if (storedApiKey()) return;
+    try {
+      const response = await fetch(api + "/api/v1/health", { headers: { Accept: "application/json" } });
+      const health = await response.json();
+      if (!health?.auth?.auth_required) return;
+    } catch {
+      return;
+    }
+    const entered = window.prompt("LAN 公開中です。API キーを入力してください。このタブを閉じるまで保持します。");
+    if (!entered) return;
+    try {
+      sessionStorage.setItem("db2rag_api_key", entered.trim());
+    } catch {
+      /* プライベートモードでは都度失敗する */
+    }
+  }
+
   async function apiJson(method, path, payload) {
+    await ensureApiKey();
     const options = { method, headers: { "Accept": "application/json" } };
+    const key = storedApiKey();
+    if (key) options.headers.Authorization = `Bearer ${key}`;
     if (payload !== undefined) {
       options.headers["Content-Type"] = "application/json";
       options.body = JSON.stringify(payload);
@@ -150,10 +179,22 @@
             fill("dify-endpoint-local", "dify-copy-local", config.endpoint_local);
             fill("dify-knowledge-id", "dify-copy-id", config.knowledge_id);
             const note = document.getElementById("dify-auth-note");
+            const hint = config.dify_ssrf_env_hint || {};
+            const ssrf = document.getElementById("dify-ssrf");
+            if (ssrf) {
+              ssrf.value = hint.variable ? `${hint.variable}=${hint.example_value || ""}` : "";
+            }
+            const ssrfCopy = document.getElementById("dify-copy-ssrf");
+            if (ssrfCopy) ssrfCopy.dataset.copy = ssrf ? ssrf.value : "";
+            const trouble = document.getElementById("dify-trouble");
+            if (trouble) {
+              trouble.textContent = hint.restart_note
+                || "Dify が blocked by SSRF protection と返すときは、上記の許可を Dify 側 .env に書いて ssrf_proxy を再起動してください。";
+            }
             if (note) {
               note.textContent = config.auth_required
-                ? `API キーが必要です。既定 ACL は ${config.default_acl} です。`
-                : `このPCからの疎通に API キーは不要です。既定 ACL は ${config.default_acl} です。`;
+                ? `API キーが必要です。Dify 未指定時の ACL は ${config.default_acl} です。ファイル RAG が private のときは、Dify 側でも同じ ACL を指定しないと 0 件になります。`
+                : `このPCからの疎通に API キーは不要です。Dify 未指定時の ACL は ${config.default_acl} です。`;
             }
             dialog.showModal();
           } catch (error) {
@@ -1190,11 +1231,28 @@
       ocrSwitch.setAttribute("aria-disabled", "true");
     }
 
+    const TEMPLATE_PRESETS = {
+      regulation_v1: {
+        title_column: "title",
+        updated_at_column: "updated_at",
+        sections: [{ heading: "本文", fields: [{ label: "本文", column: "body", type: "long_text" }] }],
+      },
+      faq_v1: {
+        title_column: "question",
+        sections: [
+          { heading: "質問", fields: [{ label: "質問", column: "question" }] },
+          { heading: "回答", fields: [{ label: "回答", column: "answer", type: "long_text" }] },
+        ],
+      },
+    };
+
     function mysqlAdvanced(tables) {
       const extra = {};
       const sqlRaw = document.getElementById("mysql-custom-sql")?.value?.trim();
       const templateRaw = document.getElementById("mysql-template-json")?.value?.trim();
       const updatedAt = document.getElementById("mysql-updated-at")?.value?.trim();
+      const presetName = document.getElementById("template")?.value || "";
+      if (document.getElementById("mysql-reconcile")?.checked) extra.reconcile_deletes = true;
       if (sqlRaw) {
         const parsed = JSON.parse(sqlRaw);
         if (!Array.isArray(parsed)) throw new Error("カスタムSQLは配列で書いてください");
@@ -1205,6 +1263,11 @@
         }));
       }
       const templates = templateRaw ? JSON.parse(templateRaw) : {};
+      if (!templateRaw && TEMPLATE_PRESETS[presetName]) {
+        tables.forEach((key) => {
+          templates[key] = JSON.parse(JSON.stringify(TEMPLATE_PRESETS[presetName]));
+        });
+      }
       if (templateRaw && (!templates || typeof templates !== "object" || Array.isArray(templates))) {
         throw new Error("テンプレートJSONはオブジェクトで書いてください");
       }

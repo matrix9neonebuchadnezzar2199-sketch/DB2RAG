@@ -37,6 +37,7 @@ def serve(host: str, port: int) -> None:
     bind = resolve_bind_host(host, allow_bind_all=settings.allow_bind_all)
     require_api_key_for_bind(bind, settings.api_key)
     os.environ["DB2RAG_HOST"] = bind
+    os.environ["DB2RAG_API_PORT"] = str(port)
     uvicorn.run("db2rag.api:app", host=bind, port=port, reload=False, factory=False)
 
 

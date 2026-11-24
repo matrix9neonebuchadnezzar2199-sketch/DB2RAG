@@ -473,28 +473,44 @@ def main() -> int:
                 f"probe={probe} records={len(records) if isinstance(records, list) else 'invalid'}",
                 time.perf_counter() - started,
             )
+            if not args.skip_docker:
+                started = time.perf_counter()
+                info = run(["docker", "info"], timeout=20)
+                if info.returncode != 0:
+                    report.add("dify-from-container", "skip", "docker unavailable", time.perf_counter() - started)
+                else:
+                    port = args.api_url.rsplit(":", 1)[-1].rstrip("/")
+                    probed = run(
+                        [
+                            "docker",
+                            "run",
+                            "--rm",
+                            "curlimages/curl:8.11.0",
+                            "-fsS",
+                            "-m",
+                            "15",
+                            f"http://host.docker.internal:{port}/api/v1/health",
+                        ],
+                        timeout=90,
+                    )
+                    detail = (probed.stdout or probed.stderr)[-240:]
+                    report.add(
+                        "dify-from-container",
+                        "pass" if probed.returncode == 0 else "warn",
+                        detail or "container could not reach host.docker.internal",
+                        time.perf_counter() - started,
+                    )
             started = time.perf_counter()
-            evaluated = run(
-                [
-                    sys.executable,
-                    "-m",
-                    "db2rag",
-                    "eval",
-                    "--rag-id",
-                    rag_id,
-                    "--dataset",
-                    str(REPO / "testdata" / "eval_baseline.json"),
-                    "--threshold",
-                    "0.0",
-                ],
+            eval_code, eval_body = http_json(
+                "POST",
+                f"{args.api_url}/api/v1/eval/run",
+                {"rag_id": rag_id, "top_k": 20, "score_threshold": 0.0},
                 timeout=600,
-                env=env,
             )
-            eval_text = (evaluated.stdout or evaluated.stderr)[-400:]
             report.add(
                 "eval-baseline",
-                "pass" if evaluated.returncode in {0, 1} and "gate_passed" in (evaluated.stdout or "") else "fail",
-                eval_text,
+                "pass" if eval_code == 200 and "gate_passed" in eval_body else "fail",
+                str(eval_body)[-400:],
                 time.perf_counter() - started,
             )
 

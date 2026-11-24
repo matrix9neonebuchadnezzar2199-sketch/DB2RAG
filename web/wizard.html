@@ -228,8 +228,9 @@
                       <div class="field">
                         <label for="template">論理文書テンプレート</label>
                         <select id="template">
-                          <option title="規程・条文向けの文章の組み立て方です">regulation_v1</option>
-                          <option title="質問と回答の対向けの文章の組み立て方です">faq_v1</option>
+                          <option value="" selected>指定しない</option>
+                          <option value="regulation_v1" title="規程・条文向けの文章の組み立て方です">regulation_v1</option>
+                          <option value="faq_v1" title="質問と回答の対向けの文章の組み立て方です">faq_v1</option>
                         </select>
                         <p class="field-tip">表の1行を、検索用の文章に組み立てるひな形です。規程なら regulation_v1、FAQ なら faq_v1 です。</p>
                       </div>
@@ -260,6 +261,7 @@
                         <input id="mysql-updated-at" placeholder="updated_at">
                         <p class="field-tip">選んだ表すべてに、この列名を updated_at_column として足します。テンプレート JSON に既にある列は上書きしません。</p>
                       </div>
+                      <label class="field" style="margin-top: 12px;"><input id="mysql-reconcile" type="checkbox"> 全件走査で、MySQL から消えた行を RAG からも外す</label>
                     </details>
                   </div>
 
@@ -361,6 +363,6 @@
   </div>
   <div class="toast-region" id="toast-region" aria-live="polite"></div>
   <script src="mockup_cyber.js?v=20260911-6"></script>
-  <script src="live.js?v=20260911-6"></script>
+  <script src="live.js?v=20261124-1"></script>
 </body>
 </html>

@@ -185,7 +185,46 @@ def test_dify_metadata_condition_filters_acl_and_source_type(
     assert filtered.status_code == 200
     assert seen[1]["acl_tags"] == ["private"]
     assert seen[1]["source_types"] == ["file", "mysql"]
-    assert rejected.status_code == 400
+    assert rejected.status_code == 200
+    assert "unsupported metadata field" in rejected.json()["warnings"][0]
+
+
+def test_dify_threshold_uses_returned_score(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _env(monkeypatch, tmp_path)
+    captured: dict[str, Any] = {}
+
+    def fake_search(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        low = dict(_hit())
+        low["score"] = 0.2
+        high = dict(_hit())
+        high["score"] = 0.9
+        high["child_chunk_id"] = "child-high"
+        return {"hits": [low, high]}
+
+    monkeypatch.setattr("db2rag.api.run_search", fake_search)
+    with TestClient(app) as client:
+        _insert_rag()
+        response = client.post(
+            "/api/v1/dify/retrieval",
+            headers=_auth(),
+            json={"knowledge_id": "rag-test", "query": "有給", "retrieval_setting": {"top_k": 5, "score_threshold": 0.5}},
+        )
+    assert response.status_code == 200
+    assert captured["score_threshold"] == 0.0
+    assert captured["top_k"] == 15
+    ids = [item["metadata"]["child_chunk_id"] for item in response.json()["records"]]
+    assert ids == ["child-high"]
+
+
+def test_dify_config_includes_ssrf_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _env(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _insert_rag()
+        response = client.get("/api/v1/rags/rag-test/dify-config", headers=_auth())
+    hint = response.json()["dify_ssrf_env_hint"]
+    assert hint["variable"] == "SSRF_PROXY_ALLOW_PRIVATE_DOMAINS"
+    assert hint["example_value"] == "host.docker.internal"
 
 
 def test_lan_mode_requires_api_key_and_acl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

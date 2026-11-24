@@ -243,6 +243,7 @@ def build_table_select(
     where_col: str | None = None,
     since_value: str | None = None,
     lookups: list[dict[str, str]] | None = None,
+    order_by: list[str] | None = None,
 ) -> tuple[str, tuple[Any, ...]]:
     """テーブル全列と lookup の LEFT JOIN を、識別子検証済み SQL にする。
 
@@ -250,8 +251,9 @@ def build_table_select(
         schema: ベース表のスキーマ。
         table: ベース表。
         where_col: 増分カーソル列。``since_value`` と組のときだけ WHERE を付ける。
-        since_value: この値より大きい行だけ取る。プレースホルダにバインドする。
+        since_value: この値以上の行を取る。同じ時刻の後書きを落とさない。
         lookups: ``column`` / ``lookup_table`` / ``lookup_key`` / ``lookup_label``。
+        order_by: 増分列と主キー。途中失敗しても未読行がカーソルの後ろに残らないよう、読む順を固定する。
 
     Returns:
         SQL とバインド値。WHERE が無いときは空タプル。
@@ -266,11 +268,21 @@ def build_table_select(
     params: tuple[Any, ...] = ()
     if where_col and since_value is not None:
         column = _ident(where_col)
-        where_sql = f" WHERE `base`.`{column}` > %s ORDER BY `base`.`{column}` ASC"
+        where_sql = f" WHERE `base`.`{column}` >= %s"
         params = (since_value,)
+    order_names: list[str] = []
+    if where_col:
+        order_names.append(where_col)
+    for name in order_by or []:
+        if name not in order_names:
+            order_names.append(name)
+    order_sql = ""
+    if order_names:
+        pieces = ", ".join(f"`base`.`{_ident(name)}` ASC" for name in order_names)
+        order_sql = f" ORDER BY {pieces}"
     sql = (
         f"SELECT `base`.*{select_extra} FROM `{schema_name}`.`{table_name}` AS `base`"
-        f"{join_sql}{where_sql}"
+        f"{join_sql}{where_sql}{order_sql}"
     )
     return sql, params
 
@@ -301,6 +313,7 @@ def iter_table_rows(
     where_col: str | None = None,
     since_value: str | None = None,
     lookups: list[dict[str, str]] | None = None,
+    order_by: list[str] | None = None,
     max_rows: int = DEFAULT_MAX_ROWS,
 ) -> Iterator[dict[str, Any]]:
     """表を REPEATABLE READ で流す。全行リストは作らない。
@@ -309,8 +322,9 @@ def iter_table_rows(
         conn: 開いている接続。
         schema: スキーマ名。
         table: 表名。
-        where_col: 増分列。``since_value`` があるとき ``col > %s``。
+        where_col: 増分列。``since_value`` があるとき ``col >= %s``。
         since_value: 増分カーソル。
+        order_by: ``build_table_select`` へ渡す並び。
         lookups: コード表の LEFT JOIN 定義。ラベルは ``__label_{column}``。
         max_rows: これを超えたら警告して打ち切る。
 
@@ -326,6 +340,7 @@ def iter_table_rows(
         where_col=where_col,
         since_value=since_value,
         lookups=lookups,
+        order_by=order_by,
     )
     yield from _stream_query(conn, sql, params, max_rows)
 

@@ -38,6 +38,7 @@ class SearchFilters(BaseModel):
     acl_tags: list[str]
     source_types: list[str] | None = None
     section_contains: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 def metadata_to_filters(
@@ -47,8 +48,11 @@ def metadata_to_filters(
 ) -> SearchFilters:
     """許可フィールドだけを検索フィルタにする。ACL 未指定は既定 ACL を強制する。
 
+    未知フィールドは検索条件にせず warnings に残す。Dify の自動 metadata が
+    任意名を送っても retrieval 全体を止めない。
+
     Raises:
-        ValueError: 未知のフィールド、演算子、または複数条件の or。
+        ValueError: 未知の演算子、または複数条件の or。
     """
     items = [] if condition is None or not condition.conditions else list(condition.conditions)
     operator = (condition.logical_operator if condition else "and").strip().lower()
@@ -60,8 +64,15 @@ def metadata_to_filters(
     acl_sets: list[set[str]] = []
     source_sets: list[set[str]] = []
     sections: list[str] = []
+    warnings: list[str] = []
     for item in items:
-        field = _field_name(item.name)
+        try:
+            field = _field_name(item.name)
+        except ValueError as exc:
+            if not str(exc).startswith("unsupported metadata field"):
+                raise
+            warnings.append(str(exc))
+            continue
         op = item.comparison_operator.strip().lower()
         if op not in ALLOWED_OPERATORS:
             raise ValueError(f"unsupported comparison_operator: {item.comparison_operator}")
@@ -82,7 +93,12 @@ def metadata_to_filters(
 
     acl_tags = _intersect(acl_sets) if acl_sets else [default_acl]
     source_types = _intersect(source_sets) if source_sets else None
-    return SearchFilters(acl_tags=acl_tags, source_types=source_types, section_contains=sections)
+    return SearchFilters(
+        acl_tags=acl_tags,
+        source_types=source_types,
+        section_contains=sections,
+        warnings=warnings,
+    )
 
 
 def to_dify_records(hits: list[dict[str, Any]], *, rag_id: str, content_mode: str) -> list[dict[str, Any]]:

@@ -71,13 +71,15 @@ def parse_md(path: Path, title: str | None = None) -> CanonicalDocument:
     """Parse Markdown, keeping tables and fenced or indented code.
 
     Args:
-        path: Markdown file path. Read as UTF-8 with an optional BOM.
+        path: Markdown file path. Encoding falls back the same way as plain text.
         title: Document title. Defaults to the file stem.
 
     Returns:
         Canonical document. Tables are ``table`` blocks and code is ``code``.
     """
-    raw = path.read_text(encoding="utf-8-sig")
+    from db2rag.parsers import read_text_with_fallback
+
+    raw = read_text_with_fallback(path)
     doc_title = title or path.stem
     tokens = _MD.parse(raw)
     blocks: list[Block] = []

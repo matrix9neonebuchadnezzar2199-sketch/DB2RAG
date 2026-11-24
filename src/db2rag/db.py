@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS rags (
     staging_collection TEXT,
     schema_version INTEGER NOT NULL DEFAULT 1,
     acl_tag_default TEXT NOT NULL DEFAULT 'internal',
+    dify_default_acl TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -185,7 +186,7 @@ def connect(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path), check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA synchronous=NORMAL")
     return conn
@@ -230,7 +231,6 @@ def _ensure_phase4_columns(conn: sqlite3.Connection) -> None:
 
     SQLite の ALTER は既存行へ NOT NULL を付けにくい。
     ``is_latest`` は ``INTEGER DEFAULT 1`` とし、NULL は 1 に埋め戻す。
-    ``SQLITE_SCHEMA_VERSION`` は変更しない。
 
     Args:
         conn: マイグレーション対象の接続。
@@ -249,6 +249,13 @@ def _ensure_phase4_columns(conn: sqlite3.Connection) -> None:
     )
 
 
+def _ensure_v3_columns(conn: sqlite3.Connection) -> None:
+    """RAG ごとの Dify 既定 ACL。既存行は NULL のまま、検索時に acl_tag_default へ落とす。"""
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(rags)").fetchall()}
+    if "dify_default_acl" not in columns:
+        conn.execute("ALTER TABLE rags ADD COLUMN dify_default_acl TEXT")
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     """未作成の表を作り、既存 DB には Phase 4 列を冪等に足す。
 
@@ -259,6 +266,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     head, index_sql = _split_phase4_index(SCHEMA_SQL)
     conn.executescript(head)
     _ensure_phase4_columns(conn)
+    _ensure_v3_columns(conn)
     if index_sql.strip():
         conn.executescript(index_sql)
     row = conn.execute(

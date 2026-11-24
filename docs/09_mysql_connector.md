@@ -191,7 +191,16 @@ row_hash = SHA256(
 
 ---
 
-## 12. 関連文書
+## 12. 増分カーソル（v0.2.1）
+
+- 増分列がある表は、初回から `ORDER BY updated_at, pk` で読む。
+- 続きは `updated_at >= cursor`。同じ時刻の後書きを落とさない。既存行は row_hash でスキップする。
+- `sync_cursor` は、そのオブジェクトのバッチがすべて成功したあとだけ書く。途中失敗では進めない。
+- `reconcile_deletes` は全件走査のときだけ、今回見えなかった最新行を外す。
+
+---
+
+## 13. 関連文書
 
 - `04_ingestion_pipeline.md`
 - `05_chunking_strategy.md` — MySQL record chunk

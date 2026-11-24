@@ -68,7 +68,8 @@ Hard-negative:
 | MRR@10 | Mean Reciprocal Rank | ≥ 0.65 |
 | nDCG@10 | 正解ランクの DCG | ≥ 0.70 |
 | Zero-result rate | 結果 0 件率 | ≤ 0.05 |
-| Hard-negative FP@5 | 禁止 chunk が top5 に入る率 | ≤ 0.10 |
+| Hard-negative FP@5 | 禁止 chunk が top5 に入る率 | 参考値。v0.2.1 の合否は 1 位率 |
+| Hard-negative top1 | 禁止 chunk が 1 位になる率 | ≤ 0.10 |
 | Structural integrity | 表・見出し保持率（手動サンプル 50 件） | ≥ 0.95 |
 | ANN recall | HNSW vs brute-force top10 一致率 | ≥ 0.98 |
 | Search latency p95 | 10万 chunk | ≤ 800ms |

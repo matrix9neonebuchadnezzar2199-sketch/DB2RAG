@@ -134,10 +134,10 @@ def create_rag(conn: sqlite3.Connection, display_name: str, acl_tag: str) -> dic
     conn.execute(
         """
         INSERT INTO rags(rag_id, display_name, status, qdrant_alias, schema_version,
-                           acl_tag_default, created_at, updated_at)
-        VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)
+                           acl_tag_default, dify_default_acl, created_at, updated_at)
+        VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)
         """,
-        (rag_id, display_name, alias, SCHEMA_VERSION, acl_tag, now, now),
+        (rag_id, display_name, alias, SCHEMA_VERSION, acl_tag, acl_tag, now, now),
     )
     conn.commit()
     return row_to_dict(conn.execute("SELECT * FROM rags WHERE rag_id=?", (rag_id,)).fetchone()) or {}
@@ -589,12 +589,15 @@ def _process_mysql_item(
     created = 0
     running_cursor: str | None = None
     row_iter: Iterator[dict[str, Any]] | None = None
+    seen_ids: list[str] = []
+    # 失敗したジョブがカーソルだけ進めると、未読行が二度と取れない。
+    full_scan = custom is None and not object_row.get("sync_cursor")
     try:
         pk = _mysql_pk(mysql_conn, config, object_row, custom)
-        row_iter = _open_mysql_rows(mysql_conn, object_row, template, custom)
+        row_iter = _open_mysql_rows(mysql_conn, object_row, template, custom, pk)
         seen = 0
         for batch in iter_row_batches(row_iter, MYSQL_BATCH_SIZE):
-            made, batch_cursor = _ingest_mysql_batch(
+            made, batch_cursor, batch_ids = _ingest_mysql_batch(
                 conn,
                 store,
                 embedder,
@@ -608,8 +611,7 @@ def _process_mysql_item(
             )
             created += made
             running_cursor = _later_cursor(running_cursor, batch_cursor)
-            if batch_cursor:
-                _write_sync_cursor(conn, str(object_row["object_id"]), running_cursor)
+            seen_ids.extend(batch_ids)
             conn.commit()
             seen += len(batch)
             _touch_item_progress(
@@ -619,6 +621,17 @@ def _process_mysql_item(
                 seen,
                 max(seen, 1),
             )
+        if full_scan and config.get("reconcile_deletes"):
+            _retire_absent_mysql_records(
+                conn,
+                store,
+                collection,
+                str(object_row["object_id"]),
+                seen_ids,
+            )
+        if running_cursor:
+            _write_sync_cursor(conn, str(object_row["object_id"]), running_cursor)
+        conn.commit()
     finally:
         if row_iter is not None:
             closer = getattr(row_iter, "close", None)
@@ -639,14 +652,16 @@ def _ingest_mysql_batch(
     batch: list[dict[str, Any]],
     pk: list[str],
     template: dict[str, Any] | None,
-) -> tuple[int, str | None]:
+) -> tuple[int, str | None, list[str]]:
     """1 バッチを判定し、変わった行だけ chunk / embed / upsert する。"""
     schema, table = str(object_row["object_key"]).split(".", 1)
     doc_columns = table_columns(conn, "document_versions")
     pending: list[_MysqlPending] = []
     cursor_max: str | None = None
+    record_ids: list[str] = []
     for row in batch:
         record_id = record_id_from(pk, row)
+        record_ids.append(record_id)
         digest = row_hash(row)
         updated = _row_updated_at(row, template)
         cursor_max = _later_cursor(cursor_max, updated)
@@ -699,7 +714,7 @@ def _ingest_mysql_batch(
             )
         )
     if not pending:
-        return 0, cursor_max
+        return 0, cursor_max, record_ids
     # バッチ内の child を 1 回で埋める。次のバッチを読む前に終わらせる。
     texts = [child.text for item in pending for child in item.chunks.children]
     vectors = embedder.encode_documents(texts)
@@ -733,7 +748,7 @@ def _ingest_mysql_batch(
             "UPDATE source_objects SET latest_doc_version_id=?, last_ingested_at=? WHERE object_id=?",
             (last_doc_id, now, object_row["object_id"]),
         )
-    return len(pending), cursor_max
+    return len(pending), cursor_max, record_ids
 
 
 def _existing_points(
@@ -914,11 +929,38 @@ def _drop_mysql_version_rows(conn: sqlite3.Connection, doc_id: str, columns: set
         )
 
 
+def _retire_absent_mysql_records(
+    conn: sqlite3.Connection,
+    store: QdrantStore,
+    collection: str,
+    object_id: str,
+    seen_ids: list[str],
+) -> None:
+    """全件走査で見えなかった最新行を、検索と export から外す。"""
+    columns = table_columns(conn, "document_versions")
+    seen = set(seen_ids)
+    rows = conn.execute(
+        """
+        SELECT doc_version_id, record_id FROM document_versions
+        WHERE object_id=? AND is_latest=1
+        """,
+        (object_id,),
+    ).fetchall()
+    for row in rows:
+        record_id = "" if row["record_id"] is None else str(row["record_id"])
+        if record_id in seen:
+            continue
+        doc_id = str(row["doc_version_id"])
+        store.delete_points(collection, _point_ids_for_doc(conn, doc_id))
+        _drop_mysql_version_rows(conn, doc_id, columns)
+
+
 def _open_mysql_rows(
     mysql_conn: Any,
     object_row: dict[str, Any],
     template: dict[str, Any] | None,
     custom: tuple[str, list[str] | None] | None,
+    pk: list[str],
 ) -> Iterator[dict[str, Any]]:
     if custom is not None:
         return iter_custom_sql_rows(mysql_conn, custom[0])
@@ -927,7 +969,13 @@ def _open_mysql_rows(
     since_value: str | None = None
     updated_column = template.get("updated_at_column") if template else None
     cursor_value = object_row.get("sync_cursor")
-    # テンプレートが増分列を指定し、カーソルがあるときだけ絞る。無いときは全件。
+    order_by: list[str] | None = None
+    if updated_column:
+        order_by = [str(updated_column)]
+        for column in pk:
+            if column not in order_by:
+                order_by.append(column)
+    # カーソルはオブジェクト完了後にだけ進む。ここは読み取り範囲だけ決める。
     if updated_column and cursor_value:
         where_col = str(updated_column)
         since_value = str(cursor_value)
@@ -939,6 +987,7 @@ def _open_mysql_rows(
         where_col=where_col,
         since_value=since_value,
         lookups=lookups or None,
+        order_by=order_by,
     )
 
 

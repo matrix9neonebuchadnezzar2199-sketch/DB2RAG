@@ -340,18 +340,27 @@ OCR・下書き保存・評価セット保存は未実装です。画面上は d
 
 ### Dify 連携
 
-Dify のコードは変えません。Dify の外部知識で Endpoint に次を登録します。
+Dify のコードは変えません。Dify の外部知識で Endpoint に次を登録します。Dify の登録画面は API キーを空にできないので、連携するときは `DB2RAG_API_KEY` を設定します。
 
 - Docker 内の Dify から: `http://host.docker.internal:8781/api/v1/dify`
 - 同じ PC から: `http://127.0.0.1:8781/api/v1/dify`
 
-`knowledge_id` は RAG ID です。一覧の「Dify連携」でコピーできます。`DB2RAG_API_KEY` を設定したときは `Authorization: Bearer` が必要です。ACL 条件が無い検索は `DB2RAG_DIFY_DEFAULT_ACL`（既定 `internal`）に絞ります。
+Dify は外部知識の通信を SSRF プロキシ経由にします。初期状態では `host.docker.internal` が拒否され、画面に `blocked by SSRF protection` と出ます。Dify の `docker/.env` に次を書き、`ssrf_proxy` を再起動してください。
+
+```text
+SSRF_PROXY_ALLOW_PRIVATE_DOMAINS=host.docker.internal
+```
+
+`logical_operator=or` で条件が複数ある検索は 400 です。未知の metadata 名は無視し、応答の `warnings` に残します。
+
+`knowledge_id` は RAG ID です。一覧の「Dify連携」でコピーできます。`DB2RAG_API_KEY` を設定したときは `Authorization: Bearer` が必要です。ACL 条件が無い検索は、その RAG を作ったときの ACL（無ければ `DB2RAG_DIFY_DEFAULT_ACL`）に絞ります。ファイルを `private` で入れた RAG は、Dify 側も同じ ACL を指定しないと 0 件です。LAN で鍵を設定したときは、画面がタブ内にだけ鍵を聞いて API に付けます。
 
 ### MySQL の詳細
 
 ジョブ作成時に任意で渡せます。
 
-- `mysql_templates`: キーは `schema.table`。`updated_at_column` があると、その列が前回より新しい行だけを取り込みます
+- `mysql_templates`: キーは `schema.table`。`updated_at_column` があると、その列がカーソル以上の行を取り込みます。カーソルは表の取り込みが最後まで成功したときだけ進みます
+- `reconcile_deletes`: 全件走査のとき、MySQL から消えた行を RAG からも外します
 - `custom_sql`: `object_key` と READ ONLY の `sql`。画面では `sql_id` も同じキーです
 - `mysql_pk_overrides`: 主キーの無いオブジェクトの列
 
